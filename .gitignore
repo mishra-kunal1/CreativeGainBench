@@ -4,3 +4,9 @@ data/
 *.egg-info/
 __pycache__/
 *.pyc
+
+# Lean formalization build artifacts
+math_backing/.lake/
+math_backing/docs/*.aux
+math_backing/docs/*.log
+math_backing/docs/*.out
