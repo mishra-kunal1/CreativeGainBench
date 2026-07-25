@@ -12,6 +12,7 @@ dependencies = [
 [project.scripts]
 download-datasets = "creativegainbench.utils.download_dataset:main"
 create-subset = "creativegainbench.utils.create_subset:main"
+estimate-cost = "creativegainbench.cost.estimate:main"
 
 [build-system]
 requires = ["setuptools"]

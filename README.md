@@ -13,7 +13,16 @@ Create a `.env` file with your tokens:
 ```
 HF_TOKEN=hf_your_token_here
 OPENAI_API_KEY=sk-your_key_here
+OPENROUTER_API_KEY=sk-or-your_key_here
+OLLAMA_API_KEY=your_ollama_cloud_key_here
 ```
+
+| Variable | Used for |
+|----------|----------|
+| `HF_TOKEN` | Downloading Hugging Face datasets |
+| `OPENAI_API_KEY` | Current OpenAI inference (`model.py`) |
+| `OPENROUTER_API_KEY` | LLM-as-judge + live $/token prices for cost estimates |
+| `OLLAMA_API_KEY` | Ollama Cloud open models (no local downloads); create at [ollama.com/settings/keys](https://ollama.com/settings/keys) |
 
 ## 1. Downloading the datasets
 
@@ -35,13 +44,33 @@ This downloads three datasets into `data/`:
 create-subset
 ```
 
-Samples 300 items (seed=42) from each dataset into `data/subset/`:
+Writes normalized `{"prompt": ...}` JSONL into `data/subset/`:
 
-- **infinity_chat_subset.jsonl** — first user message extracted as prompt
-- **formalmath_subset.jsonl** — filtered to Algebra and Number Theory domains
-- **rinobench_low_novelty.jsonl** - this dataset has only 299 prompts, so no need to do subset operation.
+- **infinity_chat_subset.jsonl** — first user message (300 samples, seed=42)
+- **formalmath_subset.jsonl** — Algebra / Number Theory `refined_statement` as prompt (300 samples)
+- **rinobench_subset.jsonl** — research idea fields composed into a prompt (~299 rows)
 
-## 3. Running inference
+## 3. Estimating multi-provider cost
+
+After subsets exist:
+
+```bash
+estimate-cost --sample 10 --n 5
+```
+
+This does **not** run generation. It:
+
+1. Samples prompts from all three domains
+2. Fetches live OpenRouter prices for GPT / Claude / Gemini and for open-model **$/token cross-quotes**
+3. Lists Ollama Cloud models (`/api/tags`) for Llama / DeepSeek / Kimi / GLM / Qwen availability (no local `ollama pull`)
+4. Estimates **generation + LLM-as-judge** costs
+5. Writes a Markdown summary and JSON under `data/evaluation/` (e.g. `cost_estimate_<timestamp>.md`)
+
+Open-model execution path is **Ollama Cloud** (subscription / GPU-time quota, not $/token). Dollar figures for those families are OpenRouter cross-quotes for research comparison only.
+
+Useful flags: `--domains`, `--assumed-completion-tokens`, `--assumed-judge-completion-tokens`, `--output-md`, `--output-json`.
+
+## 4. Running inference
 
 ```bash
 python -m creativegainbench.model \
