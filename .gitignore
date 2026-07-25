@@ -1,9 +1,18 @@
 .env
+.venv/
 CLAUDE.md
 data/
 *.egg-info/
 __pycache__/
 *.pyc
+.pytest_cache/
+
+# Generated benchmark artifacts (rebuild with prepare-artifacts + calibrate-delta-d)
+src/creativegainbench/artifacts/codebook/
+src/creativegainbench/artifacts/models/
+src/creativegainbench/artifacts/manifest.json
+src/creativegainbench/artifacts/delta_d_v1.json
+src/creativegainbench/artifacts/contamination_v1.json
 
 # Lean formalization build artifacts
 math_backing/.lake/
