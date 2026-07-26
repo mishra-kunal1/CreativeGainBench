@@ -2,15 +2,15 @@
 
 ## Run metadata
 
-- **Generated at (UTC):** 2026-07-26T17:58:13.610939+00:00
+- **Generated at (UTC):** 2026-07-26T18:10:02.239224+00:00
 - **Sample size per domain:** 10
 - **Completions per prompt (`n`):** 5
 - **Domains:** infinity_chat, formalmath, rinobench
 - **Assumed generation completion tokens:** 800
 - **Assumed judge completion tokens:** 80
 - **Token heuristic:** `ceil(len(text)/4)`
-- **OpenRouter prices fetched at:** 2026-07-26T17:58:13.460648+00:00
-- **Ollama Cloud tags fetched at:** 2026-07-26T17:58:13.597865+00:00
+- **OpenRouter prices fetched at:** 2026-07-26T18:10:02.088142+00:00
+- **Ollama Cloud tags fetched at:** 2026-07-26T18:10:02.223291+00:00
 
 ## Assumptions
 
@@ -33,9 +33,10 @@
 | Model | Provider | Available | Gen USD | Judge USD | Total USD | Gen calls | Notes |
 | --- | --- | --- | ---: | ---: | ---: | ---: | --- |
 | GPT-4o mini | openrouter | yes | $0.0240 | $0.0000 | $0.0240 | 50 |  |
-| GPT-4o | openrouter | yes | $0.4008 | $0.0000 | $0.4008 | 50 |  |
-| Claude Sonnet 4 | openrouter | yes | $0.6009 | $0.0000 | $0.6009 | 50 |  |
-| Claude Opus 4 | openrouter | yes | $3.0046 | $0.0000 | $3.0046 | 50 |  |
+| GPT-4.1 | openrouter | yes | $0.3206 | $0.0000 | $0.3206 | 50 |  |
+| Claude Sonnet 5 | openrouter | yes | $0.4006 | $0.0000 | $0.4006 | 50 |  |
+| Claude Opus 5 | openrouter | yes | $1.0015 | $0.0000 | $1.0015 | 50 |  |
+| Claude Fable 5 | openrouter | yes | $2.0031 | $0.0000 | $2.0031 | 50 |  |
 | Gemini 2.5 Flash | openrouter | yes | $0.1001 | $0.0000 | $0.1001 | 50 |  |
 | Gemini 2.5 Pro | openrouter | yes | $0.4004 | $0.0000 | $0.4004 | 50 |  |
 | Llama 4 Maverick | ollama_cloud | no | $0.0321 | $0.0000 | $0.0321 | 50 | not listed on Ollama Cloud tags as `llama4`; Ollama Cloud: subscription/GPU-time quota (not $/token); USD column = OpenRouter cross-quote `meta-llama/llama-4-maverick` |
@@ -52,9 +53,10 @@
 | Model | Provider | Available | Gen USD | Judge USD | Total USD | Gen calls | Notes |
 | --- | --- | --- | ---: | ---: | ---: | ---: | --- |
 | GPT-4o mini | openrouter | yes | $0.0241 | $0.0000 | $0.0241 | 50 |  |
-| GPT-4o | openrouter | yes | $0.4019 | $0.0000 | $0.4019 | 50 |  |
-| Claude Sonnet 4 | openrouter | yes | $0.6023 | $0.0000 | $0.6023 | 50 |  |
-| Claude Opus 4 | openrouter | yes | $3.0113 | $0.0000 | $3.0113 | 50 |  |
+| GPT-4.1 | openrouter | yes | $0.3215 | $0.0000 | $0.3215 | 50 |  |
+| Claude Sonnet 5 | openrouter | yes | $0.4015 | $0.0000 | $0.4015 | 50 |  |
+| Claude Opus 5 | openrouter | yes | $1.0038 | $0.0000 | $1.0038 | 50 |  |
+| Claude Fable 5 | openrouter | yes | $2.0076 | $0.0000 | $2.0076 | 50 |  |
 | Gemini 2.5 Flash | openrouter | yes | $0.1002 | $0.0000 | $0.1002 | 50 |  |
 | Gemini 2.5 Pro | openrouter | yes | $0.4009 | $0.0000 | $0.4009 | 50 |  |
 | Llama 4 Maverick | ollama_cloud | no | $0.0322 | $0.0000 | $0.0322 | 50 | not listed on Ollama Cloud tags as `llama4`; Ollama Cloud: subscription/GPU-time quota (not $/token); USD column = OpenRouter cross-quote `meta-llama/llama-4-maverick` |
@@ -71,9 +73,10 @@
 | Model | Provider | Available | Gen USD | Judge USD | Total USD | Gen calls | Notes |
 | --- | --- | --- | ---: | ---: | ---: | ---: | --- |
 | GPT-4o mini | openrouter | yes | $0.0244 | $0.0000 | $0.0244 | 50 |  |
-| GPT-4o | openrouter | yes | $0.4072 | $0.0000 | $0.4072 | 50 |  |
-| Claude Sonnet 4 | openrouter | yes | $0.6086 | $0.0000 | $0.6086 | 50 |  |
-| Claude Opus 4 | openrouter | yes | $3.0430 | $0.0000 | $3.0430 | 50 |  |
+| GPT-4.1 | openrouter | yes | $0.3257 | $0.0000 | $0.3257 | 50 |  |
+| Claude Sonnet 5 | openrouter | yes | $0.4057 | $0.0000 | $0.4057 | 50 |  |
+| Claude Opus 5 | openrouter | yes | $1.0143 | $0.0000 | $1.0143 | 50 |  |
+| Claude Fable 5 | openrouter | yes | $2.0287 | $0.0000 | $2.0287 | 50 |  |
 | Gemini 2.5 Flash | openrouter | yes | $0.1009 | $0.0000 | $0.1009 | 50 |  |
 | Gemini 2.5 Pro | openrouter | yes | $0.4036 | $0.0000 | $0.4036 | 50 |  |
 | Llama 4 Maverick | ollama_cloud | no | $0.0326 | $0.0000 | $0.0326 | 50 | not listed on Ollama Cloud tags as `llama4`; Ollama Cloud: subscription/GPU-time quota (not $/token); USD column = OpenRouter cross-quote `meta-llama/llama-4-maverick` |
@@ -91,18 +94,18 @@
 | kimi | ollama_cloud | $0.3289 | $0.0000 | $0.3289 | 150 |
 | llama | ollama_cloud | $0.0968 | $0.0000 | $0.0968 | 150 |
 | qwen | ollama_cloud | $0.2823 | $0.0000 | $0.2823 | 150 |
-| claude | openrouter | $10.8707 | $0.0000 | $10.8707 | 300 |
+| claude | openrouter | $10.2668 | $0.0000 | $10.2668 | 450 |
 | gemini | openrouter | $1.5061 | $0.0000 | $1.5061 | 300 |
-| gpt | openrouter | $1.2824 | $0.0000 | $1.2824 | 300 |
+| gpt | openrouter | $1.0404 | $0.0000 | $1.0404 | 300 |
 
 ## Grand totals and scale-up
 
-- **Sample gen USD (OpenRouter-priced rows):** $14.7695
+- **Sample gen USD (OpenRouter-priced rows):** $13.9237
 - **Sample judge USD:** $0.0000
-- **Sample total USD:** $14.7695
-- **Projected full-subset gen USD** (linear × full/sample): $442.5902
+- **Sample total USD:** $13.9237
+- **Projected full-subset gen USD** (linear × full/sample): $417.2419
 - **Projected full-subset judge USD:** $0.0000
-- **Projected full-subset total USD:** $442.5902
+- **Projected full-subset total USD:** $417.2419
 
 Scale-up is linear in prompt count and assumes the same mean input length and output-token assumptions. Ollama Cloud open-model dollars above use OpenRouter cross-quotes only; actual Ollama Cloud spend is subscription/quota.
 

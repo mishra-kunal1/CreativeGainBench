@@ -33,11 +33,12 @@ DEFAULT_JUDGE_MODELS = [
 
 
 GENERATION_MODELS: list[CatalogModel] = [
-    # Proprietary — OpenRouter
+    # Proprietary — OpenRouter (current mid/frontier ids)
     CatalogModel("gpt", "GPT-4o mini", "openrouter", "openai/gpt-4o-mini"),
-    CatalogModel("gpt", "GPT-4o", "openrouter", "openai/gpt-4o"),
-    CatalogModel("claude", "Claude Sonnet 4", "openrouter", "anthropic/claude-sonnet-4"),
-    CatalogModel("claude", "Claude Opus 4", "openrouter", "anthropic/claude-opus-4"),
+    CatalogModel("gpt", "GPT-4.1", "openrouter", "openai/gpt-4.1"),
+    CatalogModel("claude", "Claude Sonnet 5", "openrouter", "anthropic/claude-sonnet-5"),
+    CatalogModel("claude", "Claude Opus 5", "openrouter", "anthropic/claude-opus-5"),
+    CatalogModel("claude", "Claude Fable 5", "openrouter", "anthropic/claude-fable-5"),
     CatalogModel("gemini", "Gemini 2.5 Flash", "openrouter", "google/gemini-2.5-flash"),
     CatalogModel("gemini", "Gemini 2.5 Pro", "openrouter", "google/gemini-2.5-pro"),
     # Open — Ollama Cloud (+ OpenRouter $ cross-quote)
