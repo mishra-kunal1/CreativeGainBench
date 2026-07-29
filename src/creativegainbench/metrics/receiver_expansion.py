@@ -49,7 +49,7 @@ def compute_receiver_expansion(
     receiver_agent: ReceiverAgent,
     task_battery: List[dict],
     idea_codebook_centroids: torch.Tensor,
-    n_samples: int = 32,
+    n_samples: int,
     temperature: float = 1.0,
     device: str = "cpu",
 ) -> float:
