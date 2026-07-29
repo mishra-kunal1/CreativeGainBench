@@ -45,6 +45,7 @@ def _call_api(
     n: int,
     *,
     provider: str,
+    domain: str | None = None,
 ) -> dict:
     """
     Generate n completions. Ollama's OpenAI-compatible API typically ignores
@@ -74,11 +75,14 @@ def _call_api(
             {f"response-{i}": (choice.message.content or "")}
             for i, choice in enumerate(completion.choices)
         ]
-    return {"prompt": prompt, "responses": responses}
+    row: dict = {"prompt": prompt, "responses": responses}
+    if domain is not None:
+        row["domain"] = domain
+    return row
 
 
 def run_inference(
-    prompts: list[str],
+    records: list[dict[str, str]],
     *,
     client: OpenAI,
     model: str,
@@ -86,13 +90,20 @@ def run_inference(
     n: int = 5,
     workers: int = 64,
 ) -> list[dict]:
-    workers = max(1, min(workers, len(prompts)))
+    workers = max(1, min(workers, len(records)))
 
-    def _one(p: str) -> dict:
-        return _call_api(client, model, p, n, provider=provider)
+    def _one(record: dict[str, str]) -> dict:
+        return _call_api(
+            client,
+            model,
+            record["prompt"],
+            n,
+            provider=provider,
+            domain=record.get("domain"),
+        )
 
     with ThreadPoolExecutor(max_workers=workers) as executor:
-        results = list(executor.map(_one, prompts))
+        results = list(executor.map(_one, records))
     return results
 
 
@@ -129,19 +140,22 @@ def main() -> None:
     client = _make_client(args.provider, args.base_url)
 
     with open(args.data) as f:
-        prompts = [json.loads(line)["prompt"] for line in f]
+        records = [json.loads(line) for line in f if line.strip()]
 
     if args.limit:
-        prompts = prompts[: args.limit]
+        records = records[: args.limit]
 
     workers = args.workers
     if workers is None:
         # Keep ollama concurrency modest to avoid GPU thrash.
-        workers = min(len(prompts), 2 if args.provider == "ollama" else 64)
+        workers = min(len(records), 2 if args.provider == "ollama" else 64)
 
-    print(f"Running {len(prompts)} prompts on {args.provider}/{model} (n={args.n}, workers={workers})")
+    print(
+        f"Running {len(records)} prompts on {args.provider}/{model} "
+        f"(n={args.n}, workers={workers})"
+    )
     results = run_inference(
-        prompts,
+        records,
         client=client,
         model=model,
         provider=args.provider,

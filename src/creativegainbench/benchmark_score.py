@@ -59,7 +59,7 @@ def compute_r_creativity(
     alpha: float = 1.0,
     lambda_g: float = 0.0,
     delta_d: float = 0.0,
-    n_samples: int = 8,
+    n_samples: int,
     temperature: float = 1.0,
     use_stub_cue: bool = False,
 ) -> BenchmarkResult:

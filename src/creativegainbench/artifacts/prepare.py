@@ -191,6 +191,7 @@ def _build_train_corpus(root: Path, version: str, seed: int) -> tuple[list[str],
 
     before = len(raw)
     kept = filter_contaminated(raw, banned)
+    after_filter = len(kept)
     # Dedup by hash while preserving order.
     seen: set[str] = set()
     unique: list[str] = []
@@ -201,12 +202,15 @@ def _build_train_corpus(root: Path, version: str, seed: int) -> tuple[list[str],
         seen.add(h)
         unique.append(t)
 
+    train_kept = len(unique)
     write_exclusion_manifest(
         root / f"contamination_{version}.json",
         probe_hashes=probe_hashes,
         eval_hashes=eval_hashes,
-        train_kept=len(unique),
-        train_dropped=before - len(kept),
+        train_raw=before,
+        train_kept=train_kept,
+        train_dropped_contamination=before - after_filter,
+        train_dropped_deduplication=after_filter - train_kept,
     )
     if len(unique) < 20:
         raise RuntimeError(

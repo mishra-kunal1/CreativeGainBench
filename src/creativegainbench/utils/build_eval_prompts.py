@@ -30,12 +30,20 @@ SEED = 42
 SUBSET_SIZE = 300
 
 
-def _write_prompts(path: Path, prompts: list[str], domain: str) -> None:
+def _write_records(path: Path, records: list[dict[str, str]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w") as f:
-        for p in prompts:
-            f.write(json.dumps({"prompt": p, "domain": domain}) + "\n")
-    print(f"Wrote {len(prompts)} prompts → {path}")
+        for record in records:
+            row = {"prompt": record["prompt"], "domain": record["domain"]}
+            f.write(json.dumps(row) + "\n")
+    print(f"Wrote {len(records)} prompts → {path}")
+
+
+def _write_prompts(path: Path, prompts: list[str], domain: str) -> None:
+    _write_records(
+        path,
+        [{"prompt": p, "domain": domain} for p in prompts],
+    )
 
 
 def _from_infinity(path: Path, n: int, rng: random.Random) -> list[str]:
@@ -141,7 +149,7 @@ def main() -> None:
         "mathematical_proof": "formalmath_subset.jsonl",
     }
 
-    all_eval: list[str] = []
+    all_eval: list[dict[str, str]] = []
     for domain, src in sources.items():
         prompts: list[str] = []
         if src.exists():
@@ -158,12 +166,12 @@ def main() -> None:
         # Decontaminate vs probes.
         prompts = [p for p in prompts if text_hash(p) not in probe_hashes]
         assert_no_probe_overlap(prompts, probe_hashes)
-        all_eval.extend(prompts)
+        all_eval.extend({"prompt": p, "domain": domain} for p in prompts)
         _write_prompts(out_dir / filenames[domain], prompts, domain)
 
-    # Combined smoke/eval file.
+    # Combined eval file — preserve per-row domain for downstream grouping.
     rng.shuffle(all_eval)
-    _write_prompts(out_dir / "eval_all_domains.jsonl", all_eval, "mixed")
+    _write_records(out_dir / "eval_all_domains.jsonl", all_eval)
 
     meta = {
         "seed": SEED,

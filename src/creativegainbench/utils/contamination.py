@@ -56,15 +56,35 @@ def write_exclusion_manifest(
     *,
     probe_hashes: set[str],
     eval_hashes: set[str],
+    train_raw: int,
     train_kept: int,
-    train_dropped: int,
+    train_dropped_contamination: int,
+    train_dropped_deduplication: int,
 ) -> None:
+    """
+    Write contamination audit metadata for the KenLM / codebook train corpus.
+
+    Invariant:
+      train_raw == train_kept + train_dropped_contamination + train_dropped_deduplication
+    """
+    if (
+        train_raw
+        != train_kept + train_dropped_contamination + train_dropped_deduplication
+    ):
+        raise ValueError(
+            "Train corpus accounting mismatch: "
+            f"raw={train_raw}, kept={train_kept}, "
+            f"dropped_contamination={train_dropped_contamination}, "
+            f"dropped_deduplication={train_dropped_deduplication}"
+        )
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "n_probe_hashes": len(probe_hashes),
         "n_eval_hashes": len(eval_hashes),
+        "train_texts_raw": train_raw,
         "train_texts_kept": train_kept,
-        "train_texts_dropped_contamination": train_dropped,
+        "train_texts_dropped_contamination": train_dropped_contamination,
+        "train_texts_dropped_deduplication": train_dropped_deduplication,
         "probe_hash_sample": sorted(probe_hashes)[:5],
         "eval_hash_sample": sorted(eval_hashes)[:5],
     }

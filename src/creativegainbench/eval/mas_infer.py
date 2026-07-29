@@ -40,6 +40,8 @@ def run_mas_for_prompt(
     prompt: str,
     agent_models: list[str],
     joint_model: str,
+    *,
+    domain: str | None = None,
 ) -> dict:
     agent_texts: list[str] = []
     for i, model in enumerate(agent_models):
@@ -58,7 +60,7 @@ def run_mas_for_prompt(
         f"Task:\n{prompt}\n\nDrafts:\n{drafts}\n\nWrite the joint answer:"
     )
     joint_text = _complete(client, joint_model, joint_prompt, temperature=0.8)
-    return {
+    row = {
         "prompt": prompt,
         "agent_models": agent_models,
         "agent_texts": agent_texts,
@@ -67,6 +69,9 @@ def run_mas_for_prompt(
         # Primary response field for single-score path compatibility.
         "responses": [{"response-0": joint_text}],
     }
+    if domain is not None:
+        row["domain"] = domain
+    return row
 
 
 def main() -> None:
@@ -90,12 +95,19 @@ def main() -> None:
 
     client = _client(args.base_url)
     with open(args.data) as f:
-        prompts = [json.loads(line)["prompt"] for line in f]
+        records = [json.loads(line) for line in f if line.strip()]
     if args.limit:
-        prompts = prompts[: args.limit]
+        records = records[: args.limit]
 
     rows = [
-        run_mas_for_prompt(client, p, agent_models, args.joint_model) for p in prompts
+        run_mas_for_prompt(
+            client,
+            record["prompt"],
+            agent_models,
+            args.joint_model,
+            domain=record.get("domain"),
+        )
+        for record in records
     ]
 
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
