@@ -1,0 +1,3432 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm,mathtools}
+\usepackage{booktabs}
+\usepackage[hidelinks]{hyperref}
+\usepackage{xcolor}
+
+\newtheorem{theorem}{Theorem}
+\newtheorem{definition}{Definition}
+\newtheorem{claim}{Claim}
+\newtheorem{assumption}{Assumption}
+\newtheorem{corollary}{Corollary}
+\theoremstyle{remark}
+\newtheorem{remark}{Remark}
+\setlength{\emergencystretch}{3em}
+
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\PMF}{\operatorname{PMF}}
+\newcommand{\Ent}{\operatorname{H}}
+\newcommand{\Novelty}{\operatorname{N}}
+\newcommand{\RewardB}{R_B}
+\newcommand{\RewardC}{R_C}
+\newcommand{\RewardD}{R_D}
+\newcommand{\RewardDT}{\tilde{R}_D}
+\newcommand{\RewardN}{R_N}
+\newcommand{\RewardTrain}{R_{\mathrm{train}}}
+\newcommand{\RewardFull}{R_{\mathrm{full}}}
+\newcommand{\Feas}{\operatorname{Feas}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\LeanName}[1]{\texttt{\detokenize{#1}}}
+
+% Callout box for protocol-critical warnings (Goodhart enforcement).
+\newcommand{\calloutbox}[2]{%
+  \begin{center}
+  \fcolorbox{black}{gray!10}{\parbox{0.92\linewidth}{%
+    \textbf{#1.}\ #2}}
+  \end{center}}
+
+\title{Formal Creativity for MAS-LLMs:\\A Lean-Checked Bridge from Information Objectives to Benchmark Claims}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We introduce Creative Update Efficiency (CUE), a receiver-grounded creativity
+metric defined as Brier-score delta per output bit: an output is credited only
+for the decision-quality improvement it induces in a receiver agent,
+normalized by its length in bits. CUE is proved to be a lower bound on
+normalized Shannon Value of Information
+(\texttt{CUE\_voi\_equivalence}) and bounded by the Shannon maximum
+$\log|\mathcal{Z}|/|y|_{\mathrm{bits}}$
+(\texttt{shannon\_upper\_bound\_normalization}), where the maximum-entropy
+bound is itself derived from the Gibbs inequality rather than assumed.
+The reported \textbf{Benchmark Score} is defined by
+\[
+  R_{\mathrm{creativity}}(q,y,s)
+  =
+  1\bigl[\mathrm{CUE}(y,A,T)>0\bigr]
+  \cdot 1\bigl[R_D(y,\mathcal{P})>\delta_D\bigr]
+  \cdot\Bigl(
+    \mathrm{CUE}(y,A,T)\cdot\bigl(1+\alpha\,R_B^{\to A}(y,A)\bigr)
+    +\lambda_G\,G_k(q,y)
+  \Bigr)
+\]
+(\LeanName{Rcreativity}): both $1[\mathrm{CUE}>0]$ and
+$1[R_D>\delta_D]$ are multiplicative safety floors on the
+\emph{entire} score --- including $\lambda_G G_k$ --- so neither CUE failure
+nor D-gate failure leaves an additive escape hatch. There is no
+compression-novelty term $R_C$. Boundedness, monotonicity in CUE, and
+total-score gate closure are machine-checked. Trajectory diagnostics (Step-CUE, Diverge-Converge)
+and a multi-agent bridge ($G_k\Rightarrow$ joint CUE improvement) accompany
+the score. A Dual-Process Separation Principle is proved as a structural
+theorem: the training signal $R_{\mathrm{train}}=R_B+\tilde\lambda_D\tilde R_D$
+depends only on live resampled quantities, so its gradient is independent of
+every frozen benchmark object, and a Structural Goodhart Collapse theorem shows
+that violating any protocol condition admits a rank reversal that refutes the
+proxy-faithfulness guarantee. The Lean~4 development certifies these claims;
+remaining assumptions are centralized in a Known Gaps Registry. The document
+separates frozen benchmark objectives (Part~\ref{part:benchmark}) from the
+2-CGRPO training signal (Part~\ref{part:training}); machine-checked
+Goodhart-resistance conditions and a monitorable proxy faithfulness invariant
+(Part~\ref{part:proxy}) govern when training results may be compared against
+the benchmark.
+\end{abstract}
+
+\section{The Problem with Scalar Creativity Evaluation}
+
+Current MAS-LLM evaluation often treats creativity as a scalar quality score:
+a human or LLM judge rates an output against a rubric. This is insufficient for
+three reasons.
+
+First, it is reductive. A scalar score collapses a multi-dimensional property
+into a single number and hides the distinction between novelty, usefulness,
+diversity, surprise, downstream impact, and interaction structure.
+
+Second, it is evaluator-dependent. LLM judges can over-rate LLM-generated ideas
+relative to expert human evaluation, producing a novelty mirage: outputs appear
+creative to the evaluator because they are fluent or stylistically unusual, not
+because they introduce new information.
+
+Third, scalar evaluation misses the point of multi-agent systems. Creativity in
+a collective system is not merely the sum of individual creative outputs. The
+central object is what emerges from interaction that no individual agent could
+produce alone.
+
+\begin{claim}[Core thesis]
+Creativity in MAS-LLMs should be defined as a property of the system's
+information dynamics, not as a property of individual outputs.
+\end{claim}
+
+\subsection*{Framework Preview}
+
+We define creativity as utility-gated informational contribution. The
+feasibility condition is
+\[
+  \Feas(q,y) \iff U(q,y)\ge \tau.
+\]
+Within the feasible set, B measures downstream expansiveness and D measures
+probe-relative structural influence on a fixed hold-out probe set
+$\mathcal{P}$ (defined by the protocol in
+Appendix~\ref{app:probe-protocol}). The sole reported score is the
+\textbf{Benchmark Score}
+\begin{equation}
+\label{eq:Rcreativity}
+  R_{\mathrm{creativity}}(q,y,s)
+  :=
+  1\bigl[\mathrm{CUE}(y,A,T)>0\bigr]
+  \cdot 1\bigl[\RewardD(y,\mathcal{P})>\delta_D\bigr]
+  \cdot\Bigl(
+    \mathrm{CUE}(y,A,T)\cdot\bigl(1+\alpha\,R_B^{\to A}(y,A)\bigr)
+    +\lambda_G\,G_k(q,y)
+  \Bigr),
+\end{equation}
+formalized as \LeanName{Rcreativity}
+(Section~\ref{sec:benchmark-score}): \LeanName{cueGate} and
+\LeanName{dGate} multiply the whole bracket
+$\mathrm{CUE}\cdot(1+\alpha R_B^{\to A})+\lambda_G G_k$, enforcing a
+strict safety floor (either gate failure zeroes the score, including
+interaction gain). There is no compression-novelty component $R_C$. An
+optional additive B--D diagnostic $\RewardB+\lambda_D\RewardD$
+(\LeanName{benchmarkReward}) supports rank-preservation correspondence and
+is \emph{not} $R_{\mathrm{creativity}}$.
+
+\calloutbox{This is not the training objective}{$\RewardD$ requires a frozen probe set $\mathcal{P}$ and must never receive gradient updates. The training objective is $\RewardTrain=R_B+\tilde\lambda_D\tilde R_D$, defined in Part~\ref{part:training}.}
+
+\subsection*{Contributions Hierarchy}
+
+\calloutbox{Contributions, in order of priority}{%
+\textbf{1. Primary — CUE as VOI-grounded multiplicative base (new).} Creative
+Update Efficiency, receiver decision-quality gain per output bit, proved to
+lower-bound normalized Shannon Value of Information
+(\LeanName{CUE_voi_equivalence}) and to respect the Shannon ceiling
+(\LeanName{shannon_upper_bound_normalization}); the reported Benchmark Score
+is~\eqref{eq:Rcreativity} (\LeanName{Rcreativity}).
+\textbf{2. Secondary — Dual-Process Separation Principle.} Goodhart
+resistance as an \emph{architectural theorem}
+(\LeanName{dual_process_separation_principle}): the training gradient is
+structurally independent of frozen benchmark objects, paired with the
+Structural Goodhart Collapse theorem
+(\LeanName{structural_goodhart_collapse}) showing each protocol violation
+admits a refuting rank reversal.
+\textbf{3. Tertiary — Trajectory diagnostics.} The Step-CUE curve is
+monotone under the per-step gate
+(\LeanName{CUE_trajectory_monotone_nondecreasing}), its saturation rate
+$\gamma$ is positive exactly under continuous discovery
+(\LeanName{step_CUE_gamma_positivity_characterization}), and the
+Diverge-Converge score is achievable and non-trivial
+(\LeanName{DC_score_existence}, \LeanName{monotone_increasing_not_DC}).
+\textbf{4. Supporting — B/D information-theoretic scaffolding.} Entropy
+monotonicity, mixture anti-collapse (now axiom-free), utility gating,
+probe-relative deformation, baseline contrast, estimator rank preservation,
+and the multi-agent interaction-gain bridge.}
+
+\subsection*{Relationship to ComplLLM}
+
+ComplLLM (Guo et al., 2026) post-trains a decision-assistant LLM using
+complementary information as reward: an output scores only if it complements
+existing agent decisions, validated in verifiable decision-support domains.
+CUE inherits from ComplLLM the receiver-outcome focus and the use of decision
+quality as a training signal. It generalizes ComplLLM in three ways: (a) it
+applies to open-ended creative tasks without binary payoff decompositions,
+because the Brier-delta is defined against any finite decision-relevant state
+space; (b) it normalizes by output length in bits and connects the normalized
+quantity to a Shannon upper bound (\LeanName{shannon_upper_bound_normalization});
+and (c) it is embedded in a dual-process Goodhart-resistance protocol that
+separates frozen benchmark objects from live training proxies
+(Part~\ref{part:dps}).
+
+\subsection*{English Roadmap of the Lean Argument}
+
+The Lean development supports this thesis by proving that the proposed
+information-dynamic objectives behave exactly as the paper claims. The proof
+strategy is simple in spirit. First, define a reward B that gives credit to
+outputs only when they pass a utility gate, and then ranks feasible outputs by
+the entropy of the downstream states they induce. Lean proves that once the
+gate is open, higher downstream entropy strictly means higher B reward. It also
+proves that a lower-entropy feasible output cannot be optimal when a
+higher-entropy feasible output exists. If the high-entropy output receives
+sufficient probability mass, mixing over feasible outputs cannot do worse than
+collapsing to a strictly dominated lower-entropy output. In ordinary terms: B
+formally rules out the kind of collapse where a system keeps choosing a safe,
+narrow, predictable answer despite the availability of a more generative
+feasible alternative.
+
+Second, define a reward C that gives credit to outputs only when they pass the
+same utility gate, and then ranks them by how costly they are to encode relative
+to an existing corpus. Lean proves that C gives zero reward to infeasible
+outputs no matter how novel they look, that exact copies are bounded by the
+compressor's copy-minimality axiom, and that padding with zero-information
+content cannot improve the novelty score. In ordinary terms: C separates
+genuine novelty from three common failure modes: nonsense, plagiarism, and
+length padding. This is exploratory creativity in Boden's sense: novelty
+\emph{within} a fixed conceptual space.
+
+Third, for empirical implementation, define surface novelty N as KL divergence
+between an output's n-gram PMF and the corpus PMF. N is not a fourth creativity
+dimension; it is the tractable surface approximation to C. Lean proves its gate,
+nonnegativity, and cross-entropy link in the computational approximations
+appendix.
+
+Fourth, define D as probe-relative structural influence: corpus deformation gain
+on a fixed finite probe set $\mathcal{P}$. Under \LeanName{ProbeCompressor}, Lean
+proves that D is utility-gated, order-preserving, nonnegative, and zero for exact
+corpus copies, for any fixed $\mathcal{P}$. The benchmark operationalizes
+$\mathcal{P}$ by the hold-out protocol in Appendix~\ref{app:probe-protocol}.
+High $D$ correlates with transformational creativity when $\mathcal{P}$ is
+domain-representative; the formal theorems do not identify $D$ with Boden--Wiggins
+transformation outright. High C measures departure from the current corpus; high
+$D$ measures how much $s$ changes compression of the frozen probes.
+
+Fifth, Lean proves that these objectives add something real beyond obvious
+baselines. A utility-only reward cannot distinguish two feasible outputs with
+the same utility but different downstream entropy; B can. A novelty-only reward
+can assign positive score to an infeasible string; C cannot. D adds a separate
+probe-relative invariant: it measures whether incorporating an output changes
+compression of a frozen hold-out probe set, while Lean proves the score is
+utility-gated, order-preserving, nonnegative, and zero for exact corpus copies.
+These contrast theorems are important because they show that B, C, and D are not
+just renamings of quality or novelty rubrics; the surface-N proxy inherits the
+same gate and nonnegativity discipline in the appendix. They enforce different
+invariants.
+
+Sixth, Lean bridges the abstract objectives to measurement and training. If a
+benchmark estimator has uniformly bounded error, then entropy and novelty
+rankings are preserved whenever the true gap is larger than twice the error
+bound. This gives the benchmark an explicit resolution condition: when measured
+differences exceed $2\epsilon$, the ranking is not an artifact of estimator
+noise. Lean also proves that a simplified DPO update constructed from a
+B-valid preference pair increases the winner's log-odds over the loser, so the
+training signal moves in the direction certified by the objective. The additive
+\LeanName{benchmarkReward} diagnostic combines B and D for group-relative RL
+correspondence; the reported score remains~\eqref{eq:Rcreativity}.
+
+Finally, Lean extends the argument to multi-agent settings. It defines an
+interaction gain: the difference between joint downstream entropy and the best
+individual downstream entropy. If this gain is positive, Lean proves that
+neither individual agent alone achieves the joint entropy. The gain is zero
+exactly in the degenerate case where the joint entropy equals the best
+individual entropy (\LeanName{gain_zero_iff_joint_eq_max}); notably,
+independent product kernels with positive marginals have strictly positive
+gain by entropy additivity, which is why the framework pairs the gain with the
+faithfulness assumption and the receiver-level CUE bridge
+(\LeanName{Gk_implies_CUE_improvement}) rather than treating positive gain
+alone as synergy. If the gain
+exceeds twice the benchmark error, Lean proves that the estimator detects this
+irreducibility.
+The $k$-agent extension and O-information sign bridge are the general versions;
+the two-agent case is the readable base case.
+
+Taken together, the Lean proofs establish the paper's central logical chain:
+utility-gated entropy prevents collapse; utility-gated compression novelty
+prevents nonsense, copying, and padding; bounded estimators preserve the
+theoretical rankings; DPO-style training moves in the certified direction; and
+faithful non-product multi-agent kernels provide a formal proxy for emergent
+coordination.
+
+
+%======================================================================
+\part{Receiver-Grounded Creativity Foundation}
+\label{part:cue}
+%======================================================================
+
+\noindent
+This part is the definitional anchor of the framework. Creativity is grounded
+in the \emph{receiver}: an output is creative only insofar as it improves a
+receiver agent's downstream decisions, efficiently per bit. Everything else in
+the document --- the B/C/D components, the trajectory diagnostics, the
+multi-agent gain, the training signal --- is subordinate to this gate.
+
+\section{Creative Update Efficiency (CUE)}
+
+\begin{definition}[CUE model]
+\LeanName{CUEModel}. A receiver-grounded CUE model over a finite
+decision-relevant state space $\mathcal{Z}$ carries the receiver's posterior
+belief after the output, the Brier-score improvement
+$\Delta_{\mathrm{Brier}}(y) \ge 0$ from prior to posterior, the Shannon value
+of information $\mathrm{VOI}(y)$ of the output for the receiver's decision,
+and the output length $|y|_{\mathrm{bits}} > 0$. Two structural facts are
+carried as certified fields: the proper-scoring-rule bound
+$\Delta_{\mathrm{Brier}} \le \mathrm{VOI}$, and the residual-entropy budget
+$\mathrm{VOI} \le \Ent(\mathrm{posterior})$.
+\end{definition}
+
+\begin{definition}[Creative Update Efficiency]
+\LeanName{cue}. For a CUE model $m$,
+\[
+  \mathrm{CUE}(y, A, T)
+  :=
+  \frac{\Delta_{\mathrm{Brier}}(y)}{|y|_{\mathrm{bits}}},
+\]
+the receiver decision-quality gain per output bit. Nonnegativity is
+\LeanName{cue_nonneg}.
+\end{definition}
+
+\begin{theorem}[PROOF-01: CUE lower-bounds normalized VOI]
+\LeanName{CUE_voi_equivalence}. For any CUE model,
+\[
+  \mathrm{CUE}(y, A, T) \le \frac{\mathrm{VOI}(y, A, T)}{|y|_{\mathrm{bits}}},
+\]
+with equality when the Brier improvement saturates its proper-scoring-rule
+bound --- the calibrated binary case (\LeanName{CUE_voi_equality}).
+\end{theorem}
+\begin{proof}
+Divide the proper-scoring-rule bound $\Delta_{\mathrm{Brier}} \le \mathrm{VOI}$
+by the positive bit length; Lean closes with
+\texttt{div\_le\_div\_iff\_of\_pos\_right}. Equality substitutes
+$\Delta_{\mathrm{Brier}} = \mathrm{VOI}$.
+\end{proof}
+
+\begin{theorem}[Maximum entropy on a finite alphabet]
+\LeanName{maxEntropy_finite_alphabet}. For any PMF $p$ over a finite nonempty
+alphabet $\mathcal{Z}$,
+\[
+  \Ent(p) \le \log|\mathcal{Z}|.
+\]
+\end{theorem}
+\begin{proof}
+No new axiom is introduced: the KL divergence of $p$ against the uniform
+distribution evaluates to $\log|\mathcal{Z}| - \Ent(p)$
+(\LeanName{klDivergence_uniform_eq}, using the finite mass identity
+\LeanName{sum_toReal_eq_one}), and the existing Gibbs inequality
+\LeanName{klDivergence_nonneg} makes it nonnegative.
+\end{proof}
+
+\begin{theorem}[PROOF-02: Shannon upper bound normalization]
+\LeanName{shannon_upper_bound_normalization}. For any CUE model over
+$\mathcal{Z}$,
+\[
+  \mathrm{CUE}(y, A, T) \le \frac{\log|\mathcal{Z}|}{|y|_{\mathrm{bits}}}.
+\]
+\end{theorem}
+\begin{proof}
+Chain $\Delta_{\mathrm{Brier}} \le \mathrm{VOI} \le \Ent(\mathrm{posterior})
+\le \log|\mathcal{Z}|$, the last step by
+\LeanName{maxEntropy_finite_alphabet}, and divide by the positive bit length.
+\end{proof}
+
+\begin{theorem}[CUE primary gate]
+\LeanName{CUE_primary_gate}. Zero or negative CUE disqualifies all downstream
+metrics: if $\mathrm{CUE}(y,A,T) \not> 0$, the gated creativity score of $y$
+is zero regardless of its B, C, or D values (\LeanName{cueGatedScore}).
+\end{theorem}
+
+\calloutbox{CUE gates everything}{The B/C/D components of
+Part~\ref{part:definition} are \emph{components of the CUE-gated score}, not
+co-equal creativity dimensions. An output that fails the CUE gate receives no
+creativity credit no matter how expansive, novel, or structurally influential
+it is.}
+
+\section{Receiver Expansion vs.\ Clarification}
+
+The bidirectional receiver label $R_B^{\to A}$ records whether an output
+\emph{expands} the receiver's downstream generative space (high receiver
+entropy) or \emph{clarifies} it (low receiver entropy).
+
+\begin{theorem}[PROOF-06: expansion/clarification separation]
+\LeanName{receiver_expansion_clarification_separation}. The label
+$R_B^{\to A}$ is not a monotone function of CUE: there exist outputs
+$y_1, y_2$ with equal CUE but opposite labels --- one expanding
+($R_B^{\to A}(y_1) > \delta_E$) and one clarifying
+($R_B^{\to A}(y_2) < \delta_E$).
+\end{theorem}
+\begin{proof}
+Explicit finite construction mirroring \LeanName{BC_tension_example}: two
+labeled outputs (\LeanName{LabeledOutput}) share the same underlying CUE model
+on $\operatorname{Fin}(2)$ (hence genuinely equal CUE), while their receiver
+expansion magnitudes are $1$ (maximal, uniform-generation scale) and $0$
+(point-mass commitment), with threshold $\delta_E = 1/2$ strictly between.
+\end{proof}
+
+\section{The Benchmark Score: CUE as Multiplier}
+\label{sec:benchmark-score}
+\label{sec:shifted-cue}
+
+\paragraph{Canonical definition.}
+The reported Benchmark Score is exactly~\eqref{eq:Rcreativity}:
+\[
+  R_{\mathrm{creativity}}(q,y,s)
+  =
+  \mathbb{1}\bigl[\mathrm{CUE}(y,A,T)>0\bigr]
+  \cdot\mathbb{1}\bigl[R_D(y,\mathcal{P})>\delta_D\bigr]
+  \cdot\Bigl(
+    \mathrm{CUE}(y,A,T)\cdot\bigl(1+\alpha\,R_B^{\to A}(y,A)\bigr)
+    +\lambda_G\,G_k(q,y)
+  \Bigr).
+\]
+Lean name: \LeanName{Rcreativity} (abbrev.\ \LeanName{benchmarkScore}).
+Gates are \LeanName{cueGate} and \LeanName{dGate}. There is no $R_C$ term.
+Placing $\lambda_G G_k$ \emph{inside} both indicators closes the additive
+escape hatch that an ungated interaction-gain term would create: any CUE or
+$R_D$ violation immediately nullifies the total reward (multiplicative safety
+floor). Proof obligations of this regime are discharged as follows.
+
+\begin{theorem}[CUE-gate closure --- total zero]
+\LeanName{Rcreativity_cue_gate_closed}. If $\mathrm{CUE}\le 0$, then
+$R_{\mathrm{creativity}}=0$ (including the $\lambda_G G_k$ term).
+\end{theorem}
+
+\begin{theorem}[D-gate closure --- total zero]
+\LeanName{Rcreativity_d_gate_closed}. If $R_D\le\delta_D$, then
+$R_{\mathrm{creativity}}=0$ (including the $\lambda_G G_k$ term). The
+magnitude of $R_D$ never enters the score (\LeanName{D2_dominance} is
+diagnostic-only here).
+\end{theorem}
+
+\begin{theorem}[Nonnegativity]
+\LeanName{Rcreativity_nonneg}. Under $\alpha>0$, $r_b\in[0,1]$,
+$0\le\lambda_G$, and $0\le G_k$, one has $0\le R_{\mathrm{creativity}}$.
+\end{theorem}
+
+\begin{theorem}[CUE-as-multiplier ceiling]
+\LeanName{Rcreativity_bounded}.
+$R_{\mathrm{creativity}}\le
+(\log|Z|/|y|_{\mathrm{bits}})\cdot(1+\alpha)+\lambda_G G_k$,
+via \LeanName{shannon_upper_bound_normalization} and
+\LeanName{receiver_expansion_bounded}.
+\end{theorem}
+
+\begin{theorem}[Monotonicity in CUE]
+\LeanName{Rcreativity_monotone_in_CUE}. With both gates open and fixed
+$(\alpha,r_b,\lambda_G,G_k)$, strictly larger CUE yields a strictly larger
+score: CUE's magnitude is load-bearing.
+\end{theorem}
+
+\begin{theorem}[Positivity matches CUE]
+\LeanName{Rcreativity_pos_iff_CUE_pos}. With the D-gate open and
+$\lambda_G G_k=0$, one has $0<R_{\mathrm{creativity}}$ iff $0<\mathrm{CUE}$.
+\end{theorem}
+
+\begin{theorem}[Unit reconciliation]
+\LeanName{unit_conversion_sign_and_order_invariant}. Positive rescaling
+preserves sign and order. CUE is bits-normalized while $R_B^{\to A}$ is
+nats-based; the residual scale is absorbed by the free-fit hyperparameter
+$\alpha$ (KG-6), explicitly weaker than a proved $\lambda$-normalization.
+\end{theorem}
+
+\paragraph{Proof flow (central claims).}
+\begin{enumerate}
+  \item \emph{CUE is a valid base:} PROOF-01/02 give VOI lower-bound and
+  Shannon ceiling; \LeanName{cueGate} is a safety floor on the whole score.
+  \item \emph{$R_D$ is a filter, not a summand:} \LeanName{dGate} likewise
+  zeroes the entire score; magnitude is discarded
+  (\LeanName{D2_dominance} diagnostic-only). The former $R_C$-coupled D3
+  bound is replaced by \LeanName{D3_rewardD_bound_standalone}.
+  \item \emph{Expansion bonus is controlled:}
+  \LeanName{receiver_expansion_bounded} gives $r_b\in[0,1]$, so the factor
+  $1+\alpha r_b$ lies in $[1,1+\alpha]$. Theorem~5's separate-label result
+  (\LeanName{receiver_expansion_clarification_separation}) remains valid as
+  a diagnostic statement; folding $R_B^{\to A}$ into~\eqref{eq:Rcreativity}
+  is a deliberate, documented exception for the reported score.
+  \item \emph{$G_k$ has no ungated path:} $\lambda_G G_k$ sits inside both
+  indicators, so Theorems~6--7 prove total-score zero on either gate failure
+  (strengthening the earlier ``reduces to $\lambda_G G_k$'' statements).
+  \LeanName{Gk_implies_CUE_improvement} / \LeanName{Gk_gated_by_CUE_shifted}
+  remain compatible with this floor.
+  \item \emph{Former $R_C$ dependencies are bridged:}
+  \LeanName{lambda_D_normalization_standalone} and
+  \LeanName{paretoFrontier_nonempty_BD} replace $\lambda_C$- and
+  three-way-C-coupled commensurability/Pareto claims for any residual B--D
+  diagnostic.
+\end{enumerate}
+
+\paragraph{Optional shifted calibration.}
+The scalar $\mathrm{CUE}_f:=\mathrm{CUE}-f$ (\LeanName{CUE_shifted}, KG-5)
+and \LeanName{Rcreativity_shifted} are retained only as calibration variants;
+they are \emph{not} the canonical definition~\eqref{eq:Rcreativity}.
+
+\begin{theorem}[Shifted Shannon ceiling]
+\LeanName{CUE_shifted_bound}. For every CUE model $m$ and threshold $f$,
+$\mathrm{CUE}_f \le \log|Z| / |y|_{\mathrm{bits}} - f$.
+\end{theorem}
+
+\begin{theorem}[Universal expansion bound]
+\LeanName{receiver_expansion_bounded}. With
+$R_B^{\to A} = H(\mathrm{Gen}(A \mid y, T)) / \log|W|$
+(\LeanName{receiverExpansionNorm}), one has $0 \le R_B^{\to A} \le 1$.
+\end{theorem}
+
+\begin{theorem}[$G_k$ gated by shifted CUE]
+\LeanName{Gk_gated_by_CUE_shifted}. Under
+\LeanName{Gk_implies_CUE_improvement}, if $G_k > 0$ and
+$f < \mathrm{CUE}$, then $G_k \cdot \mathbb{1}[\mathrm{CUE}_f > 0] > 0$.
+\end{theorem}
+
+\section{Formal Correspondence Table}
+
+\begin{center}
+\scriptsize
+\begin{tabular}{@{}p{0.22\linewidth}p{0.48\linewidth}p{0.24\linewidth}@{}}
+\toprule
+Proposal construct & Lean theorem & Status \\
+\midrule
+$\mathrm{CUE}(y,A,T)$ & \LeanName{cue}, \LeanName{CUE_voi_equivalence} & Machine-checked (PROOF-01) \\
+Shannon normalization & \LeanName{shannon_upper_bound_normalization} & Machine-checked (PROOF-02) \\
+\textbf{Benchmark Score} $R_{\mathrm{creativity}}$ & \LeanName{Rcreativity} & Canonical def.~\eqref{eq:Rcreativity} \\
+CUE / D gates (total zero) & \LeanName{cueGate}, \LeanName{dGate}, \LeanName{Rcreativity_cue_gate_closed}, \LeanName{Rcreativity_d_gate_closed} & Score $=0$ if either fails \\
+Boundedness / monotone & \LeanName{Rcreativity_bounded}, \LeanName{Rcreativity_monotone_in_CUE} & Machine-checked \\
+Positivity & \LeanName{Rcreativity_pos_iff_CUE_pos} & Machine-checked \\
+Unit reconciliation & \LeanName{unit_conversion_sign_and_order_invariant} & Machine-checked \\
+$R_B^{\to A}$ bound & \LeanName{receiver_expansion_bounded} & Machine-checked \\
+$G_k$ decision bridge & \LeanName{Gk_implies_CUE_improvement}, \LeanName{Gk_gated_by_CUE_shifted} & Machine-checked (PROOF-07) \\
+D3 standalone & \LeanName{D3_rewardD_bound_standalone} & Bridge ($R_C$-free) \\
+$\lambda_D$ standalone & \LeanName{lambda_D_normalization_standalone} & Bridge (B--D diagnostic) \\
+B--D Pareto & \LeanName{paretoFrontier_nonempty_BD} & Bridge (B--D diagnostic) \\
+DPS / Goodhart & \LeanName{dual_process_separation_principle}, \LeanName{structural_goodhart_collapse} & Machine-checked \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+%======================================================================
+\part{Creativity Definition (Measurement)}
+\label{part:definition}
+%======================================================================
+
+\noindent
+This part is organized in three tiers subordinate to the CUE foundation of
+Part~\ref{part:cue}: \textbf{Tier A (multiplicative base)} is gated CUE;
+\textbf{Tier B (structural filters)} comprises the $R_D$ probe-relative gate
+and the $R_B^{\to A}$ expansion bonus; \textbf{Tier C (interaction
+certification)} is the multi-agent gain $G_k$. The sole reported measurement is
+the Benchmark Score~\eqref{eq:Rcreativity}
+(\LeanName{Rcreativity}, Section~\ref{sec:benchmark-score}).
+It is \emph{not} the quantity the trainer optimizes: the training signal
+$\RewardTrain=\RewardB+\tilde\lambda_D\RewardDT$
+(Part~\ref{part:training}) replaces frozen $\RewardD$ by the live proxy.
+The additive intermediate $\RewardB+\lambda_D\RewardD$
+(\LeanName{benchmarkReward}) serves B/D rank-preservation correspondence only
+and is never identified with $R_{\mathrm{creativity}}$. Compression novelty
+$R_C$ is not a score component; \LeanName{AbstractCompressor} remains solely
+as infrastructure for \LeanName{ProbeCompressor}/$R_D$.
+
+\section{Formal Framework}
+
+\subsection{The B Reward}
+
+The Lean structure \LeanName{BModel} contains a kernel
+\[
+  \texttt{kernel} : Q \to Y \to \PMF(Z),
+\]
+a utility function $U : Q \to Y \to \R$, and a threshold $\tau \in \R$.
+The project defines
+\[
+  \Feas_m(q,y) \iff \tau \le U(q,y)
+\]
+and
+\[
+  \RewardB(q,y) :=
+    \begin{cases}
+      H_q(y), & \Feas_m(q,y),\\
+      0, & \text{otherwise}.
+    \end{cases}
+\]
+
+\subsection{Compressor infrastructure (not a score component)}
+
+$R_C$ is \emph{not} part of $R_{\mathrm{creativity}}$. The Lean class
+\LeanName{AbstractCompressor} is retained solely so that
+\LeanName{ProbeCompressor} (and hence $R_D$) can use code-length /
+novelty primitives:
+
+\begin{enumerate}
+  \item a code length function $L : \text{List}(\alpha) \to \R$;
+  \item nonnegativity: $0 \le L(s)$ for all strings $s$;
+  \item copy minimality:
+  \[
+    L(\mathcal{H} \mathbin{++} s) - L(\mathcal{H}) \le L(s).
+  \]
+\end{enumerate}
+The novelty score is
+\[
+  N(s \mid \mathcal{H}) = L(\mathcal{H} \mathbin{++} s) - L(\mathcal{H}),
+\]
+and the gated reward is
+\[
+  \RewardC(s,\mathcal{H},u,\tau) :=
+    \begin{cases}
+      N(s \mid \mathcal{H}), & \tau \le u,\\
+      0, & \text{otherwise}.
+    \end{cases}
+\]
+This $\RewardC$ object is \emph{not} used in~\eqref{eq:Rcreativity}; it is
+shown only because $N(\,\cdot\mid\mathcal{H})$ underpins $R_D$.
+For padding results, \LeanName{NormalizedCompressor} adds:
+\[
+  L(\mathcal{H} \mathbin{++} (s \mathbin{++} p))
+    \le L(\mathcal{H} \mathbin{++} s) + L(p).
+\]
+
+\subsection{The D Reward}
+
+The Lean class \LeanName{ProbeCompressor} extends the compressor setting with a
+fixed finite probe set $\mathcal{P}$. The deformation score measures how much
+incorporating $s$ into the corpus reduces compression cost on those probes:
+\[
+  D(s,\mathcal{H},\mathcal{P})
+  :=
+  \sum_{s'\in\mathcal{P}}
+  \bigl(N(s'\mid\mathcal{H})-N(s'\mid\mathcal{H}\cup\{s\})\bigr).
+\]
+The gated reward is
+\[
+  \RewardD(s,\mathcal{H},\mathcal{P},u,\tau) :=
+    \begin{cases}
+      D(s,\mathcal{H},\mathcal{P}), & \tau \le u,\\
+      0, & \text{otherwise}.
+    \end{cases}
+\]
+D therefore measures probe-relative structural influence: it is not novelty
+relative to the current corpus, but the extent to which adding the output changes
+compression of a frozen hold-out probe set.
+
+\subsection{Combined Training Objective}
+
+In a DPO-style training regime, preference pairs are built inside the feasible
+set. A B-pair prefers the feasible output with higher downstream entropy; a
+D-pair prefers the feasible output with higher probe-relative deformation gain.
+The conceptual combined loss is
+\[
+  \mathcal{L}(\theta)
+    = \mathcal{L}_{B\text{-DPO}}(\theta)
+      + \lambda_D \mathcal{L}_{D\text{-DPO}}(\theta),
+\]
+with no $R_C$ / C-DPO channel. B governs downstream impact and D governs
+structural influence on a fixed probe set. Reported evaluation uses
+$R_{\mathrm{creativity}}$~\eqref{eq:Rcreativity}, not this training loss.
+
+\subsection{Commensurability: B--D diagnostic normalization}
+
+The optional additive diagnostic $\RewardB+\lambda_D\RewardD$ is justified
+because $H_q(y)$ and $D(s,\mathcal{H},\mathcal{P})$ are Shannon quantities
+in nats; $\lambda_D$ is a dimensionless scale. The reported Benchmark Score
+is multiplicative~\eqref{eq:Rcreativity} and instead uses the unit-reconciliation
+lemma of Section~\ref{sec:benchmark-score}. For the diagnostic:
+
+\begin{theorem}[B ceiling]
+\LeanName{rewardB_le_maxEntropy}. For every prompt and output,
+$\RewardB(q,y) \le \log|\mathcal{Z}|$: gated-off outputs score
+$0 \le \log|\mathcal{Z}|$ and feasible outputs score their downstream entropy,
+bounded by \LeanName{maxEntropy_finite_alphabet} (Part~\ref{part:cue}).
+\end{theorem}
+
+\begin{theorem}[$\lambda_D$ normalization]
+\LeanName{lambda_D_normalization_standalone}. With
+$\lambda_D=\log|\mathcal{Z}|/(|P|\cdot\log|\Sigma|\cdot\E[|s'|])$, where
+$|P|$ is the probe set size and $\E[|s'|]$ is the mean probe string length,
+\[
+  \lambda_D \cdot \bigl(|P|\cdot\log|\Sigma|\cdot\E[|s'|]\bigr)
+  = \log|\mathcal{Z}|,
+\]
+so the maximal $\lambda_D$-scaled D contribution coincides exactly with the
+proved B ceiling.
+\end{theorem}
+
+$R_B$ and $R_D$ are two projections of the same generative event: the
+agent's output simultaneously induces a downstream state distribution
+(measured by B) and deforms the compression of domain-representative probes
+(measured by D); normalization ensures neither projection dominates by
+default in the diagnostic.
+
+\subsection{Summary Criterion}
+
+In this framework, a MAS-LLM behavior is creative when it scores positively
+on~\eqref{eq:Rcreativity}: both CUE and $R_D$ gates open (else the score is
+identically zero), with CUE magnitude, expansion bonus, and (when applicable)
+interaction gain $G_k$ contributing inside that floor. High D on a
+domain-representative $\mathcal{P}$ is an empirical correlate of
+transformational creativity rather than transformation by definition.
+
+\section{Lean-Checked Objective Guarantees}
+
+This section records the exact mathematical assumptions under which the Lean
+project proves each objective property. The proof checker verifies the
+statements listed by their Lean names.
+
+\subsection{Entropy Layer}
+
+\begin{theorem}[Shannon entropy nonnegativity]
+\LeanName{shannonEntropy_nonneg}. For any finite type $\alpha$ and any
+$p : \PMF(\alpha)$,
+\[
+  0 \le -\sum_{x:\alpha} p(x) \log p(x).
+\]
+\end{theorem}
+\begin{proof}
+For each $x$, $p(x)$ is a probability mass, so $0\le p(x)\le 1$. Hence
+$\log p(x)\le 0$ and therefore $p(x)\log p(x)\le 0$. Summing over the finite
+type gives
+\[
+  \sum_x p(x)\log p(x)\le 0.
+\]
+Multiplying by $-1$ yields
+\[
+  0\le -\sum_x p(x)\log p(x).
+\]
+In Lean this is proved by applying \texttt{Real.mul\_log\_nonpos} pointwise
+and then \texttt{Finset.sum\_nonpos}.
+\end{proof}
+
+\begin{theorem}[Point mass entropy]
+\LeanName{shannonEntropy_point_mass}. For any finite type $\alpha$ and
+$x_0:\alpha$,
+\[
+  H(\delta_{x_0}) = 0.
+\]
+\end{theorem}
+\begin{proof}
+For the point mass $\delta_{x_0}$, the probability is $1$ at $x_0$ and $0$ at
+every other point. Thus every entropy summand is either $1\log 1$ or
+$0\log 0$, both of which evaluate to $0$ in the real-valued definition used by
+the project. Therefore the finite sum is zero. Lean proves this by splitting on
+whether $x=x_0$ and simplifying \texttt{PMF.pure\_apply}.
+\end{proof}
+
+\begin{theorem}[Entropy order unfolding]
+\LeanName{shannonEntropy_lt_iff}. For finite $\alpha$ and $p,q:\PMF(\alpha)$,
+\[
+  H(p)<H(q)
+  \quad\Longleftrightarrow\quad
+  -\sum_x p(x)\log p(x)<-\sum_x q(x)\log q(x).
+\]
+\end{theorem}
+\begin{proof}
+This is definitional: \LeanName{shannonEntropy} is exactly the finite negative
+sum on both sides. Lean proves the equivalence by simplifying with the
+definition of \LeanName{shannonEntropy}.
+\end{proof}
+
+\subsection{Lean Helper Lemmas for B}
+
+The B model file also proves four helper lemmas used by later theorems.
+
+\begin{theorem}[Reward on feasible outputs]
+\LeanName{rewardB_of_feasible}. If $\Feas_m(q,y)$, then
+\[
+  \RewardB(q,y)=H_q(y).
+\]
+\end{theorem}
+\begin{proof}
+The definition of $\RewardB$ is an if-then-else on feasibility. Under the
+assumption $\Feas_m(q,y)$, the true branch is selected. Lean proves this by
+simplifying \texttt{rewardB}.
+\end{proof}
+
+\begin{theorem}[Reward on infeasible outputs]
+\LeanName{rewardB_of_infeasible}. If $\neg\Feas_m(q,y)$, then
+\[
+  \RewardB(q,y)=0.
+\]
+\end{theorem}
+\begin{proof}
+Unfold the same if-then-else defining $\RewardB$. Under infeasibility, the false
+branch is selected, which is $0$. Lean proves this by simplification.
+\end{proof}
+
+\begin{theorem}[B reward nonnegativity]
+\LeanName{rewardB_nonneg}. For every $q,y$,
+\[
+  0\le \RewardB(q,y).
+\]
+\end{theorem}
+\begin{proof}
+If $y$ is feasible, then $\RewardB(q,y)=H_q(y)$, which is nonnegative by
+\LeanName{shannonEntropy_nonneg}. If $y$ is infeasible, then
+$\RewardB(q,y)=0$. Lean proves this by case-splitting on feasibility and
+simplifying.
+\end{proof}
+
+\begin{theorem}[Feasible-set membership]
+\LeanName{mem_feasibleSet_iff}. For finite $Y$,
+\[
+  y\in \operatorname{feasibleSet}(q)
+  \quad\Longleftrightarrow\quad
+  \Feas_m(q,y).
+\]
+\end{theorem}
+\begin{proof}
+The feasible set is defined as the finite universe filtered by the feasibility
+predicate. Membership in this filtered universe is therefore equivalent to
+feasibility itself. Lean proves this by simplifying \texttt{feasibleSet}.
+\end{proof}
+
+\subsection{B: Anti-Collapse and Entropic Ordering}
+\label{sec:b-anti-collapse}
+
+\begin{theorem}[B1: dominance]
+\LeanName{B1_dominance}. Assume $Z$ is finite, $m : \texttt{BModel}(Q,Y,Z)$,
+$q:Q$, and $y_1,y_2:Y$. If
+\[
+  \Feas_m(q,y_1), \qquad \Feas_m(q,y_2),
+  \qquad H_q(y_2) < H_q(y_1),
+\]
+then
+\[
+  \RewardB(q,y_2) < \RewardB(q,y_1).
+\]
+\end{theorem}
+\begin{proof}
+Because both outputs are feasible, the utility gate is open for both:
+\[
+  \RewardB(q,y_i)=H_q(y_i)\qquad (i=1,2).
+\]
+Substituting these equalities into the desired conclusion reduces it exactly to
+the hypothesis $H_q(y_2)<H_q(y_1)$. Lean proves this by simplifying the
+definition of \texttt{rewardB} under the feasibility hypotheses.
+\end{proof}
+
+\noindent
+Consequence: inside the feasible set, B rewards exactly the downstream entropy
+ordering. The result is order-theoretic: once the gate is open, the reward
+unfolds to entropy.
+
+\begin{theorem}[B2: no entropy-dominated optimum]
+\LeanName{B2_no_collapse}. Assume $Y$ and $Z$ are finite. Let
+$m : \texttt{BModel}(Q,Y,Z)$, $q:Q$, and $y,y^\star:Y$. If
+\[
+  \Feas_m(q,y), \qquad \Feas_m(q,y^\star), \qquad
+  H_q(y) < H_q(y^\star),
+\]
+and the feasible set $\{y' : \Feas_m(q,y')\}$ is nonempty, then
+\[
+  \RewardB(q,y)
+    < \sup_{y' \in \Feas_m(q,\cdot)} \RewardB(q,y').
+\]
+\end{theorem}
+\begin{proof}
+By B1, the hypotheses imply
+\[
+  \RewardB(q,y)<\RewardB(q,y^\star).
+\]
+Since $y^\star$ is feasible, it belongs to the feasible finite set. A finite
+supremum is strictly above a value whenever some member of the set is strictly
+above that value. Applying this finite-supremum fact to $y^\star$ gives
+\[
+  \RewardB(q,y)
+  <
+  \sup_{y'\in\Feas_m(q,\cdot)}\RewardB(q,y').
+\]
+Lean uses \texttt{Finset.lt\_sup'\_iff} with witness $y^\star$.
+\end{proof}
+
+\noindent
+Consequence: a deterministic policy concentrated on a strictly
+entropy-dominated feasible output cannot be optimal for B.
+
+\subsubsection*{Mixture rewards (B3)}
+
+\noindent\textbf{Proof status (PROOF-09, resolved).}
+The distributional Jensen extension \LeanName{B3b_jensen_anti_collapse}
+formerly depended on \LeanName{entropy_mixture_concavity_axiom}. That axiom
+has been \emph{removed and promoted to a theorem},
+\LeanName{entropy_mixture_concavity}, proved from primitives via the concave
+Jensen inequality (\texttt{ConcaveOn.le\_map\_sum}) applied to
+\texttt{Real.concaveOn\_negMulLog}, with the pointwise mixture-kernel
+evaluation \LeanName{mixtureKernel_apply_toReal} and the finite mass identity
+\LeanName{sum_toReal_eq_one}. B3b is now a full theorem with no axiom
+dependence.
+
+\begin{theorem}[B3: mixture lower bound]
+\LeanName{B3_mixture_lb}. Assume $Y$ and $Z$ are finite. Let $\pi:\PMF(Y)$.
+If the support of $\pi$ is feasible, $y_{\mathrm{low}}$ and
+$y_{\mathrm{high}}$ are feasible, $H_q(y_{\mathrm{low}})<H_q(y_{\mathrm{high}})$,
+$\pi(y_{\mathrm{high}})>0$, and
+\[
+  \RewardB(q,y_{\mathrm{low}})
+  \le
+  \pi(y_{\mathrm{high}})\RewardB(q,y_{\mathrm{high}}),
+\]
+then
+\[
+  \RewardB(q,y_{\mathrm{low}})
+  \le
+  \sum_y \pi(y)\RewardB(q,y).
+\]
+\end{theorem}
+\begin{proof}
+Each term $\pi(y)\RewardB(q,y)$ in the mixture expectation is nonnegative, so
+the full finite sum is at least the mass-weighted contribution from
+$y_{\mathrm{high}}$:
+\[
+  \pi(y_{\mathrm{high}})\RewardB(q,y_{\mathrm{high}})
+  \le
+  \sum_y \pi(y)\RewardB(q,y).
+\]
+The hypothesis
+$\RewardB(q,y_{\mathrm{low}})\le\pi(y_{\mathrm{high}})\RewardB(q,y_{\mathrm{high}})$
+then gives the claim by transitivity. In Lean, this is obtained from
+\LeanName{B3_weighted_high_lb} (Appendix~\ref{app:b3-scaffolding}).
+\end{proof}
+
+\begin{remark}[Why the mass-weighted assumption is necessary]
+The stronger informal statement ``positive mass on a higher-entropy feasible
+output suffices'' is false in general. A positive probability can be arbitrarily
+small, so $\pi(y_{\mathrm{high}})\RewardB(q,y_{\mathrm{high}})$ may still be
+less than $\RewardB(q,y_{\mathrm{low}})$. The Lean theorem therefore records
+the weakest sufficient algebraic condition used by the proof.
+\end{remark}
+
+\begin{theorem}[B3b: Jensen anti-collapse]
+\LeanName{B3b_jensen_anti_collapse} via \LeanName{entropy_mixture_concavity}
+(PROOF-09, promoted from axiom). For every prompt $q$ and mixture
+$\pi:\PMF(Y)$,
+\[
+  \sum_y \pi(y)H_q(y)
+  \le
+  \Ent(\mu_q(\pi)).
+\]
+\end{theorem}
+\begin{proof}
+Write both sides as sums of $\operatorname{negMulLog}$ terms
+(\LeanName{shannonEntropy_eq_sum_negMulLog}). The mixture kernel evaluates
+pointwise to the $\pi$-average of component masses
+(\LeanName{mixtureKernel_apply_toReal}, from \texttt{PMF.bind\_apply}). For
+each downstream state $z$, apply concave Jensen
+(\texttt{ConcaveOn.le\_map\_sum} with \texttt{Real.concaveOn\_negMulLog}),
+using weights $\pi(y)$ that sum to one (\LeanName{sum_toReal_eq_one}). Summing
+over $z$ and interchanging the finite double sum gives the claim.
+\end{proof}
+
+\noindent
+Consequence: anti-collapse is not only a pairwise dominance property (B1--B2).
+At the reward level, if the high-entropy output receives sufficient probability
+mass, mixing over feasible outputs cannot do worse than collapsing to a strictly
+dominated lower-entropy output. At the distributional level, B3b states that
+the entropy of a downstream mixture kernel is at least the $\pi$-weighted average
+of component entropies---now proved from primitives, with no axiom dependence.
+
+\subsection{C: Utility Gate, Copy Penalty, and Anti-Padding (Composability Score Only)}
+
+The C1--C3 theorems below remain machine-checked but, after $R_C$ removal,
+apply to the Composability Score only; the Benchmark Score contains no
+$R_C$ term.
+
+\begin{theorem}[C1: utility gate]
+\LeanName{C1_utility_gate}. For any type $\alpha$ with an
+\LeanName{AbstractCompressor}, strings $s,\mathcal{H}$, utility value $u$, and
+threshold $\tau$, if
+\[
+  u < \tau,
+\]
+then
+\[
+  \RewardC(s,\mathcal{H},u,\tau)=0.
+\]
+\end{theorem}
+\begin{proof}
+The definition of $\RewardC$ branches on the condition $\tau\le u$. The
+hypothesis $u<\tau$ is equivalent to $\neg(\tau\le u)$, so the false branch of
+the definition applies and the reward is $0$. Lean proves this by simplifying
+\texttt{rewardC} with \texttt{not\_le.mpr}.
+\end{proof}
+
+\noindent
+Consequence: novelty alone cannot score; infeasible randomness receives zero
+C reward.
+
+\begin{theorem}[C2: copy penalty]
+\LeanName{C2_copy_penalty}. Under \LeanName{AbstractCompressor}, for every
+corpus $\mathcal{H}$,
+\[
+  N(\mathcal{H}\mid \mathcal{H}) \le L(\mathcal{H}).
+\]
+\end{theorem}
+\begin{proof}
+Unfolding novelty gives
+\[
+  N(\mathcal{H}\mid\mathcal{H})
+  =
+  L(\mathcal{H}\mathbin{++}\mathcal{H})-L(\mathcal{H}).
+\]
+The copy-minimality axiom, applied with $s=\mathcal{H}$ and corpus
+$\mathcal{H}$, states exactly
+\[
+  L(\mathcal{H}\mathbin{++}\mathcal{H})-L(\mathcal{H})
+  \le L(\mathcal{H}).
+\]
+Thus the desired inequality follows directly. Lean unfolds \texttt{novelty} and
+uses the copy-minimality field of \LeanName{AbstractCompressor}.
+\end{proof}
+
+\noindent
+Consequence: exact corpus copies are bounded by the copy-minimality axiom and
+cannot be treated as unbounded novelty.
+
+\begin{theorem}[C3: anti-padding]
+\LeanName{C3_no_padding_exploit}. Under \LeanName{NormalizedCompressor}, for
+any string $s$, padding $p$, and corpus $\mathcal{H}$,
+\[
+  N(s \mathbin{++} p \mid \mathcal{H})
+    \le N(s \mid \mathcal{H}) + L(p).
+\]
+\end{theorem}
+\begin{proof}
+Expanding the definition of novelty, the desired inequality becomes
+\[
+  L(\mathcal{H}\mathbin{++}(s\mathbin{++}p))-L(\mathcal{H})
+  \le
+  \bigl(L(\mathcal{H}\mathbin{++}s)-L(\mathcal{H})\bigr)+L(p).
+\]
+After adding $L(\mathcal{H})$ to both sides, this is exactly the normalized
+compressor padding-bound axiom:
+\[
+  L(\mathcal{H}\mathbin{++}(s\mathbin{++}p))
+  \le
+  L(\mathcal{H}\mathbin{++}s)+L(p).
+\]
+Lean unfolds \texttt{novelty}, rewrites list associativity, and finishes by
+linear arithmetic from the compressor axiom.
+\end{proof}
+
+\begin{corollary}[Zero-information padding]
+\LeanName{C3_no_trivial_padding_gain}. If additionally $L(p)=0$, then
+\[
+  N(s \mathbin{++} p \mid \mathcal{H})
+    \le N(s \mid \mathcal{H}).
+\]
+\end{corollary}
+\begin{proof}
+Apply C3:
+\[
+  N(s\mathbin{++}p\mid\mathcal{H})
+  \le N(s\mid\mathcal{H})+L(p).
+\]
+Using the additional assumption $L(p)=0$, the right-hand side simplifies to
+$N(s\mid\mathcal{H})$. Lean invokes \LeanName{C3_no_padding_exploit} and then
+simplifies with $L(p)=0$.
+\end{proof}
+
+\noindent
+Consequence: the C objective closes the length exploit for padding with zero
+information content.
+
+In practice, C is estimated via KL divergence between output and corpus token
+PMFs. This is the tractable surface-level approximation of algorithmic code
+length; the Lean file proves gating, nonnegativity, and the cross-entropy link
+$N_{\mathrm{KL}}+\Ent(p_s)\approx N(s\mid\mathcal{H})$ in
+Appendix~\ref{app:n-surface}.
+
+\section{Baseline Contrast: What B and C Add}
+
+The Lean development also proves that B and C improve on natural baselines in
+the exact directions claimed.
+
+\subsection{Utility-Only Baseline}
+
+Define a utility-only reward
+\[
+  R_U(q,y) :=
+    \begin{cases}
+      U(q,y), & \Feas_m(q,y),\\
+      0, & \text{otherwise}.
+    \end{cases}
+\]
+
+\begin{theorem}[Utility-only indistinguishability]
+\LeanName{BBase_indistinguishable}. Assume $Z$ is finite. If $y_1,y_2$ are
+feasible, have equal utility,
+\[
+  U(q,y_1)=U(q,y_2),
+\]
+and may differ in downstream entropy, then
+\[
+  R_U(q,y_1)=R_U(q,y_2).
+\]
+\end{theorem}
+\begin{proof}
+Since both outputs are feasible, the utility-only reward unfolds to utility on
+both sides:
+\[
+  R_U(q,y_1)=U(q,y_1),\qquad R_U(q,y_2)=U(q,y_2).
+\]
+The hypothesis $U(q,y_1)=U(q,y_2)$ then gives
+$R_U(q,y_1)=R_U(q,y_2)$. The entropy disequality is deliberately unused: it is
+the feature the utility-only baseline fails to detect. Lean proves this by
+simplifying \texttt{rewardUtil} under feasibility and equal utility.
+\end{proof}
+
+\begin{theorem}[B distinguishes what utility-only misses]
+\LeanName{BContrast_distinguishes}. Under the same feasibility and equal-utility
+assumptions, if
+\[
+  H_q(y_2) < H_q(y_1),
+\]
+then
+\[
+  R_U(q,y_1)=R_U(q,y_2)
+  \quad\text{and}\quad
+  \RewardB(q,y_2)<\RewardB(q,y_1).
+\]
+\end{theorem}
+\begin{proof}
+The first conjunct follows from the previous utility-only argument: feasibility
+opens the utility gate and equal utility makes the two baseline rewards equal.
+For the second conjunct, feasibility opens the B gate, so
+\[
+  \RewardB(q,y_i)=H_q(y_i)\qquad(i=1,2).
+\]
+The entropy hypothesis $H_q(y_2)<H_q(y_1)$ then gives
+$\RewardB(q,y_2)<\RewardB(q,y_1)$ by B1. Lean proves the conjunction by
+simplifying the first component and applying \LeanName{B1_dominance} for the
+second.
+\end{proof}
+
+\subsection{Novelty-Only Baseline}
+
+Define an ungated novelty reward
+\[
+  R_N(s,\mathcal{H}) := N(s\mid\mathcal{H}).
+\]
+
+\begin{theorem}[Ungated novelty rewards infeasible novelty]
+\LeanName{CBase_infeasible_can_maximize}. Under \LeanName{AbstractCompressor},
+if $u<\tau$ and $0<N(s\mid\mathcal{H})$, then
+\[
+  R_N(s,\mathcal{H})>0
+  \quad\text{and}\quad
+  \RewardC(s,\mathcal{H},u,\tau)=0.
+\]
+\end{theorem}
+\begin{proof}
+By definition, $R_N(s,\mathcal{H})=N(s\mid\mathcal{H})$, so the assumption
+$0<N(s\mid\mathcal{H})$ proves $R_N(s,\mathcal{H})>0$. Meanwhile $u<\tau$
+means the utility gate in $\RewardC$ is closed, so $\RewardC$ evaluates to $0$.
+Lean proves the first conjunct by unfolding \texttt{rewardNovOnly} and the
+second by simplifying \texttt{rewardC}.
+\end{proof}
+
+\noindent
+Consequence: C adds exactly the missing utility gate to novelty-only scoring.
+
+\section{Composability of B, C, and D}
+
+The Lean file \texttt{Creativity/Training/Composability.lean} formalizes the
+idea that optimizing B, C, and D jointly creates a Pareto-style objective rather
+than a single reducible scalar. The objectives are genuinely multi-dimensional:
+Lean contains explicit finite constructions with distinct B, C, and D maximizers
+(Appendix~\ref{app:composability-scaffolding}). The main structural fact needed
+in the paper is that the Pareto frontier is nonempty.
+
+\begin{theorem}[Nonempty Pareto frontier]
+\LeanName{paretoFrontier_nonempty}. For any finite nonempty output type $Y$ and
+any rewards $B,C:Y\to\R$, there exists some $y:Y$ that is not jointly dominated
+by any other output.
+\end{theorem}
+\begin{proof}
+Choose $y$ to be an argmax of the finite function $B$. Such a maximizer exists
+because $Y$ is finite and nonempty. By the previous theorem, no other output can
+strictly dominate it in B while being at least as good in C. Therefore this
+$y$ lies on the Pareto frontier. Lean obtains the finite maximizer using
+\texttt{Finset.exists\_mem\_eq\_sup'}.
+\end{proof}
+
+
+%======================================================================
+\part{Benchmark Evaluation Objectives (Frozen, No Gradient Access)}
+\label{part:benchmark}
+%======================================================================
+
+\noindent
+This part collects the benchmark-only quantities: the probe-relative
+structural influence $\RewardD$ with its \LeanName{ProbeCompressor} axioms and
+full hold-out protocol, the interaction gain $G_k$ with its irreducibility
+theorems, the O-information sign bridges, and estimator rank preservation for
+B, C, and D. None of these quantities may receive gradient access.
+
+\calloutbox{Goodhart protection}{$\mathcal{P}$ is frozen before all
+experimental conditions (Appendix~\ref{app:probe-protocol} hold-out protocol).
+$G_k$ is computed post-hoc on fixed agent configurations. Neither
+$\mathcal{P}$ nor any benchmark prompt appears in the training data or reward
+computation. Violation of this constraint invalidates all rank preservation
+guarantees.}
+
+\section{Component D: Probe-Relative Structural Influence}
+
+The file \texttt{Creativity/D/Deformation.lean} extends the compressor with
+\LeanName{ProbeCompressor}, adding two axioms:
+\begin{itemize}
+  \item \textbf{Incorporation helps:} $N(s'\mid\mathcal{H}\cup\{s\})\le
+    N(s'\mid\mathcal{H})$ for every probe $s'$;
+  \item \textbf{Self-append invariance:} $N(s'\mid\mathcal{H}\mathbin{++}\mathcal{H})
+    =N(s'\mid\mathcal{H})$, so exact corpus copies change nothing.
+\end{itemize}
+The Lean parameter \texttt{probes : List (List $\alpha$)} is a fixed finite
+probe set $\mathcal{P}$ satisfying the benchmark hold-out protocol
+(Appendix~\ref{app:probe-protocol}). The deformation gain is
+\[
+  D(s,\mathcal{H},\mathcal{P})
+  :=
+  \sum_{s'\in\mathcal{P}}
+  \bigl(N(s'\mid\mathcal{H})-N(s'\mid\mathcal{H}\cup\{s\})\bigr),
+\]
+formalized as \LeanName{corpusDeformationGain}. The gated reward is
+\LeanName{rewardD}. All D theorems are stated for an arbitrary fixed finite
+$\mathcal{P}$; they certify algebraic properties of $D$ given $\mathcal{P}$,
+not the choice of $\mathcal{P}$ itself.
+
+\noindent\textbf{Claim framing.}
+$D$ measures probe-relative structural influence, not transformational creativity
+\emph{by definition}. A random or unrepresentative $\mathcal{P}$ yields
+uninformative $D$. When $\mathcal{P}$ is domain-representative---as under the
+hold-out protocol below---high $D$ correlates with transformational creativity
+in Boden's sense: outputs that compress future domain strings better are
+restructuring the domain's information landscape.
+
+\noindent\textbf{Operational probe-set protocol.}
+Construct $\mathcal{P}$ as a stratified hold-out sample from the benchmark task
+distribution: withhold 10--20\% of the evaluation set before any training run,
+then sample $|\mathcal{P}|=100$--$200$ strings from that hold-out stratified by
+task category. Freeze $\mathcal{P}$ before all experimental conditions. Record
+the sampling seed and split index in Appendix~\ref{app:probe-protocol}.
+
+\begin{theorem}[D1: utility gate]
+\LeanName{D1_utility_gate}. If $u<\tau$, then $\RewardD(q,s)=0$.
+\end{theorem}
+\begin{proof}
+Same utility-gating argument as C1 and N1. Lean simplifies \texttt{rewardD}
+with \texttt{not\_le.mpr}.
+\end{proof}
+
+\begin{theorem}[D2: deformation ordering]
+\LeanName{D2_dominance}. If $u\ge\tau$ and
+$D(s_1,\mathcal{H},\mathcal{P})<D(s_2,\mathcal{H},\mathcal{P})$, then
+$\RewardD(q,s_1)<\RewardD(q,s_2)$.
+\end{theorem}
+\begin{proof}
+Under feasibility, $\RewardD$ equals the ungated deformation gain. The strict
+inequality on gains transfers directly. Lean simplifies \texttt{rewardD} with
+the feasibility hypothesis and applies the deformation gap.
+\end{proof}
+
+\begin{theorem}[D3: exploration bounded by code length (Composability Score only)]
+\LeanName{D3_rewardC_bounded}. If $u\ge\tau$, then
+\[
+  \RewardC(q,s)\le L(s).
+\]
+\end{theorem}
+\begin{proof}
+Under feasibility, $\RewardC=N(s\mid\mathcal{H})$. The copy-minimality axiom
+of \LeanName{AbstractCompressor} gives exactly
+$N(s\mid\mathcal{H})\le L(s)$. Lean unfolds \texttt{rewardC} and applies
+\texttt{copy\_minimal}.
+\end{proof}
+
+\begin{theorem}[D3: joint exploration--transformation bound (Composability Score only)]
+\LeanName{D3_exploration_transformation_bound}. Under
+\LeanName{ProbeCompressor}, if $u\ge\tau$, then
+\[
+  \RewardC(q,s)+\RewardD(q,s)
+  \le
+  L(s)+D(s,\mathcal{H},\mathcal{P}).
+\]
+\end{theorem}
+\begin{proof}
+Under feasibility, the left side is $N(s\mid\mathcal{H})+D(s,\mathcal{H},\mathcal{P})$.
+Apply D3\_rewardC\_bounded for the first term and add the nonnegative second
+term. Lean rewrites both gated rewards and uses \texttt{linarith}.
+\end{proof}
+
+\begin{theorem}[D3 standalone: $R_C$-free deformation bound]
+\LeanName{D3_rewardD_bound_standalone}. Under \LeanName{ProbeCompressor},
+if $u\ge\tau$, then
+\[
+  \RewardD(q,s) \le D(s,\mathcal{H},\mathcal{P}).
+\]
+This is the D3 bound used by the Benchmark Score: no compression-length
+($L(s)$/$R_C$) term appears.
+\end{theorem}
+\begin{proof}
+Under feasibility, $\RewardD$ unfolds to the deformation gain itself, so the
+bound holds with equality. Lean simplifies \texttt{rewardD} with the
+feasibility hypothesis.
+\end{proof}
+
+\begin{theorem}[D4: zero probe influence for corpus copies]
+\LeanName{D4_zero_for_corpus_copy}. When $s=\mathcal{H}$ is appended to itself,
+\[
+  D(\mathcal{H},\mathcal{H},\mathcal{P})=0.
+\]
+\end{theorem}
+\begin{proof}
+Each probe contribution is
+$N(s'\mid\mathcal{H})-N(s'\mid\mathcal{H}\mathbin{++}\mathcal{H})$. The
+\LeanName{append_self_invariant} axiom makes every term zero. Lean proves this
+by induction on the finite probe list.
+\end{proof}
+
+\begin{corollary}[Zero gated reward for corpus copy]
+\LeanName{D4_zero_reward_for_corpus_copy}. If $u\ge\tau$ and $s=\mathcal{H}$,
+then $\RewardD(q,s)=0$.
+\end{corollary}
+\begin{proof}
+Combine D4 with the feasibility branch of \texttt{rewardD}.
+\end{proof}
+
+\noindent
+Interpretation: exploratory novelty (C) measures departure from the \emph{current}
+corpus. Probe-relative structural influence (D) measures how much the output
+\emph{changes} compression of a fixed hold-out probe set $\mathcal{P}$. High C
+with $D=0$ is exploratory creativity within fixed rules. High $D$ on a
+domain-representative $\mathcal{P}$ correlates with Boden--Wiggins
+transformational creativity; the Lean theorems do not equate $D$ with
+transformation outright.
+
+\section{Benchmark Estimator Guarantees}
+
+The objective theorems are exact. A benchmark only observes estimates. The
+Lean bridge proves that bounded-error estimators preserve rankings when true
+gaps exceed twice the error bound.
+
+\subsection{Entropy Estimator}
+
+\begin{definition}[B estimator]
+\LeanName{BEstimator}. For a model $m$, a B estimator consists of
+\[
+  \widehat{H}:Q\to Y\to\R,\qquad \epsilon\in\R,
+\]
+with uniform error bound
+\[
+  |\widehat{H}(q,y)-H_q(y)| \le \epsilon
+  \quad\text{for all }q,y.
+\]
+\end{definition}
+
+\begin{theorem}[Entropy rank preservation]
+\LeanName{B_rank_preserved}. Assume $Z$ is finite. If $y_1,y_2$ are feasible and
+\[
+  H_q(y_2)+2\epsilon < H_q(y_1),
+\]
+then
+\[
+  \widehat{H}(q,y_2)<\widehat{H}(q,y_1).
+\]
+\end{theorem}
+\begin{proof}
+The estimator guarantees give
+\[
+  |\widehat{H}(q,y_i)-H_q(y_i)|\le\epsilon
+  \qquad(i=1,2).
+\]
+Thus
+\[
+  \widehat{H}(q,y_2)\le H_q(y_2)+\epsilon
+  \quad\text{and}\quad
+  H_q(y_1)-\epsilon\le \widehat{H}(q,y_1).
+\]
+The true-gap assumption
+\[
+  H_q(y_2)+2\epsilon < H_q(y_1)
+\]
+rearranges to
+\[
+  H_q(y_2)+\epsilon < H_q(y_1)-\epsilon.
+\]
+Chaining these inequalities yields
+\[
+  \widehat{H}(q,y_2)
+  \le H_q(y_2)+\epsilon
+  < H_q(y_1)-\epsilon
+  \le \widehat{H}(q,y_1).
+\]
+Lean extracts the one-sided bounds from \texttt{abs\_le.mp} and finishes with
+\texttt{linarith}.
+\end{proof}
+
+\subsection{Novelty Estimator}
+
+\begin{definition}[C estimator]
+\LeanName{CEstimator}. A C estimator consists of
+\[
+  \widehat{N}:\text{List}(\alpha)\to\text{List}(\alpha)\to\R,
+  \qquad \epsilon\in\R,
+\]
+with uniform error bound
+\[
+  |\widehat{N}(s,\mathcal{H})-N(s\mid\mathcal{H})| \le \epsilon.
+\]
+\end{definition}
+
+\begin{theorem}[Novelty rank preservation]
+\LeanName{C_rank_preserved}. If
+\[
+  N(s_2\mid\mathcal{H})+2\epsilon < N(s_1\mid\mathcal{H}),
+\]
+then
+\[
+  \widehat{N}(s_2,\mathcal{H})<\widehat{N}(s_1,\mathcal{H}).
+\]
+\end{theorem}
+\begin{proof}
+The proof is the novelty analogue of the entropy estimator proof. From the
+uniform error bound,
+\[
+  \widehat{N}(s_2,\mathcal{H})\le N(s_2\mid\mathcal{H})+\epsilon
+\]
+and
+\[
+  N(s_1\mid\mathcal{H})-\epsilon
+  \le \widehat{N}(s_1,\mathcal{H}).
+\]
+The true novelty gap
+\[
+  N(s_2\mid\mathcal{H})+2\epsilon<N(s_1\mid\mathcal{H})
+\]
+implies
+\[
+  N(s_2\mid\mathcal{H})+\epsilon
+  < N(s_1\mid\mathcal{H})-\epsilon.
+\]
+Combining these inequalities gives
+$\widehat{N}(s_2,\mathcal{H})<\widehat{N}(s_1,\mathcal{H})$. Lean again uses
+\texttt{abs\_le.mp} followed by \texttt{linarith}.
+\end{proof}
+
+\noindent
+Benchmark implication: the harness is reliable for pairwise ranking only when
+the true gap exceeds $2\epsilon$. This is an explicit measurement-resolution
+condition, not a hidden assumption.
+
+
+\subsection{Proxy Rank Preservation for D}
+
+The D component deliberately has no trainable estimator of its own: $\RewardD$
+is benchmark-only. Its rank-preservation analogue is the conditional proxy
+bridge \LeanName{D_tilde_proxy_rank_agreement} (Part~\ref{part:proxy}): under
+the \LeanName{ProxyFaithfulness} assumption, a proxy gap
+\[
+  \RewardDT(s_1)-\RewardDT(s_2)>2\epsilon
+\]
+forces
+$\RewardD(s_1,\mathcal{H},\mathcal{P})>\RewardD(s_2,\mathcal{H},\mathcal{P})$.
+Unlike the purely algebraic B and C estimator bounds above, this bridge
+carries an \emph{empirical} faithfulness condition that must be monitored at
+every training checkpoint (Part~\ref{part:training},
+Section~\ref{sec:goodhart-conditions}).
+\section{Multi-Agent Irreducibility}
+
+The two-agent Lean model has individual kernels
+\[
+  T_1(\cdot\mid q,y_1),\qquad T_2(\cdot\mid q,y_2)
+\]
+and a joint kernel
+\[
+  T_J(\cdot\mid q,y_1,y_2).
+\]
+It defines
+\[
+  H_1=H(T_1),\qquad H_2=H(T_2),\qquad H_J=H(T_J),
+\]
+and the interaction gain
+\[
+  G(q,y_1,y_2)
+  :=
+  H_J(q,y_1,y_2)-\max\{H_1(q,y_1),H_2(q,y_2)\}.
+\]
+Downstream entropy connects to emergence because it measures whether a
+system-level output expands the future state space rather than constraining
+subsequent agents into a narrow trajectory. In O-information language,
+redundancy repeats the same information across agents, while synergy encodes
+information no agent holds alone; B rewards outputs that preserve the possibility
+of such recombination.
+
+\begin{assumption}[Faithfulness]
+\label{assumption:faithfulness}
+Every directed edge $(i,j)$ in the communication graph $\mathcal{G}$ corresponds
+to a nonzero pairwise information signal in the joint downstream process: for
+any edge $(i,j)$, there exist $q,\mathbf{y}$ such that
+\[
+  I(z_i;z_j\mid q,\mathbf{y})>0.
+\]
+This is the standard causal faithfulness assumption
+(Spirtes, Glymour, and Scheines, 2000; Pearl, 2009). It rules out degenerate
+parameter settings in which agent $j$ structurally depends on agent $i$ but the
+statistical effect cancels to zero. Operationally, faithfulness is testable in
+the benchmark by measuring pairwise TDMI between agent message streams; TDMI
+above the $2\epsilon$ resolution threshold validates the assumption on the
+observed task distribution.
+\end{assumption}
+
+\begin{theorem}[Corrected zero-gain characterization (PROOF-11)]
+\LeanName{gain_zero_iff_joint_eq_max}. For the scalar entropy layer,
+\[
+  G_k(q,\mathbf{y})=0
+  \quad\Longleftrightarrow\quad
+  H_J(q,\mathbf{y})=\max_i H_i(q,y_i),
+\]
+i.e.\ zero gain holds exactly in the degenerate case where the joint process
+adds nothing over the best individual agent.
+\end{theorem}
+
+\calloutbox{Known gap resolved: the old bridge axiom was false}{The previous
+axiom \LeanName{gain_zero_iff_productKernel} asserted
+$G_k = 0 \iff \LeanName{isProductKernel}(m)$. This is \emph{incorrect} for
+product kernels with positive marginals: entropy additivity
+(\LeanName{productKernel_joint_entropy_eq_sum}, now a theorem, PROOF-10) gives
+$H_J = H_1 + H_2 > \max(H_1,H_2)$ whenever both marginal entropies are
+positive, so the gain is strictly \emph{positive}, not zero. The axiom has
+been removed from the Lean development. The refuting direction is
+machine-checked as \LeanName{productKernel_additivity_gain_pos}: for a
+two-agent coupling with additive joint entropy and positive marginals,
+$0 < G_k$. The corrected biconditional \LeanName{gain_biconditional} is
+stated against the degeneracy condition $H_J = \max_i H_i$ and is proved, not
+assumed.}
+
+\begin{theorem}[Irreducibility from positive interaction gain]
+\LeanName{MAS_irreducibility}. Assume $Z$ is finite. If
+\[
+  0<G(q,y_1,y_2),
+\]
+then
+\[
+  H_1(q,y_1)<H_J(q,y_1,y_2)
+  \quad\text{and}\quad
+  H_2(q,y_2)<H_J(q,y_1,y_2).
+\]
+\end{theorem}
+\begin{proof}
+Expanding interaction gain gives
+\[
+  0 < H_J(q,y_1,y_2)-\max\{H_1(q,y_1),H_2(q,y_2)\}.
+\]
+Equivalently,
+\[
+  \max\{H_1(q,y_1),H_2(q,y_2)\}<H_J(q,y_1,y_2).
+\]
+But each individual entropy is bounded above by the maximum:
+\[
+  H_1(q,y_1)\le \max\{H_1(q,y_1),H_2(q,y_2)\},
+\]
+\[
+  H_2(q,y_2)\le \max\{H_1(q,y_1),H_2(q,y_2)\}.
+\]
+Transitivity gives both strict inequalities against $H_J$. Lean unfolds
+\texttt{interactionGain} and uses \texttt{le\_max\_left},
+\texttt{le\_max\_right}, and \texttt{linarith}.
+\end{proof}
+
+\noindent
+Consequence: positive interaction gain formally certifies that neither agent
+alone achieves the joint downstream entropy. Under
+Assumption~\ref{assumption:faithfulness} and the product-kernel bridge below,
+positive $G$ reflects genuine multi-agent coordination: zero gain corresponds
+to product-kernel independence, while positive gain corresponds to a non-product
+joint downstream process.
+
+\begin{definition}[Two-agent estimator]
+\LeanName{TwoAgentEstimator}. The MAS benchmark estimator supplies
+\[
+  \widehat{H}_1,\qquad \widehat{H}_2,\qquad \widehat{H}_J
+\]
+with a common uniform error bound $\epsilon$:
+\[
+  |\widehat{H}_1-H_1|\le\epsilon,\quad
+  |\widehat{H}_2-H_2|\le\epsilon,\quad
+  |\widehat{H}_J-H_J|\le\epsilon.
+\]
+\end{definition}
+
+\begin{theorem}[Benchmark detection of irreducibility]
+\LeanName{MAS_benchmark_detects_irreducibility}. If
+\[
+  2\epsilon < G(q,y_1,y_2),
+\]
+then
+\[
+  \max\{\widehat{H}_1(q,y_1),\widehat{H}_2(q,y_2)\}
+  <
+  \widehat{H}_J(q,y_1,y_2).
+\]
+\end{theorem}
+\begin{proof}
+The estimator bounds imply
+\[
+  \widehat{H}_1(q,y_1)\le H_1(q,y_1)+\epsilon,\qquad
+  \widehat{H}_2(q,y_2)\le H_2(q,y_2)+\epsilon,
+\]
+and
+\[
+  H_J(q,y_1,y_2)-\epsilon\le \widehat{H}_J(q,y_1,y_2).
+\]
+The gain condition
+\[
+  2\epsilon < H_J(q,y_1,y_2)-\max\{H_1(q,y_1),H_2(q,y_2)\}
+\]
+rearranges to
+\[
+  \max\{H_1(q,y_1),H_2(q,y_2)\}+\epsilon
+  < H_J(q,y_1,y_2)-\epsilon.
+\]
+Since $H_1$ and $H_2$ are each at most their maximum, the preceding inequalities
+give
+\[
+  \widehat{H}_1(q,y_1)<\widehat{H}_J(q,y_1,y_2)
+  \quad\text{and}\quad
+  \widehat{H}_2(q,y_2)<\widehat{H}_J(q,y_1,y_2).
+\]
+The characterization
+\[
+  \max\{a,b\}<c \iff a<c \text{ and } b<c
+\]
+then yields the desired result. Lean extracts the one-sided bounds with
+\texttt{abs\_le.mp}, rewrites by \texttt{max\_lt\_iff}, and solves both goals
+with \texttt{linarith}.
+\end{proof}
+
+\noindent
+Benchmark implication: when interaction gain exceeds twice the estimator error,
+the harness detects the joint behavior as irreducible.
+
+\subsection{Extension to \texorpdfstring{\(k\)-Agent}{k-Agent} Systems}
+
+The two-agent theorem is the smallest case of a more general Lean development.
+For $k>0$ agents, the project defines a \LeanName{KAgentModel} with a
+communication graph \LeanName{CommGraph}. A graph edge
+\[
+  \mathcal{G}(i,j)
+\]
+means that agent $j$ receives information from agent $i$. The model also records
+an abstract pairwise information quantity \LeanName{pairMutualInfo} and a
+faithfulness field: every edge has some task/output witness with strictly
+positive pairwise information. The individual
+kernels
+\[
+  T_i(\cdot\mid q,y_i)\qquad (i:\operatorname{Fin}(k))
+\]
+and a joint kernel
+\[
+  T_J(\cdot\mid q,\mathbf{y}),
+  \qquad \mathbf{y}:\operatorname{Fin}(k)\to Y.
+\]
+The individual and joint entropies are
+\[
+  H_i(q,y_i) := H(T_i(\cdot\mid q,y_i)),
+  \qquad
+  H_J(q,\mathbf{y}) := H(T_J(\cdot\mid q,\mathbf{y})).
+\]
+The $k$-agent interaction gain is
+\[
+  G_k(q,\mathbf{y})
+  :=
+  H_J(q,\mathbf{y})
+  -
+  \max_{i:\operatorname{Fin}(k)} H_i(q,y_i).
+\]
+This is the direct generalization of the two-agent gain: it compares the joint
+downstream entropy to the strongest individual downstream entropy among all
+agents.
+
+\begin{theorem}[Base non-product kernel]
+\LeanName{nonProduct_base_case}. For two agents, if the communication graph has
+an edge $0\to1$, then faithfulness rules out product-kernel independence:
+\[
+  \neg\,\LeanName{isProductKernel}(m).
+\]
+\end{theorem}
+\begin{proof}
+Faithfulness supplies a witness $q,\mathbf{y}$ with positive pairwise
+information along the edge. Product-kernel independence forces all off-diagonal
+pairwise information values to be zero. These two statements contradict each
+other. Lean closes the contradiction by rewriting the product consequence and
+using \texttt{linarith}.
+\end{proof}
+
+\begin{theorem}[Non-product kernel from an active graph]
+\LeanName{connectedMAS_nonProductKernel}. For any number of agents, if
+\LeanName{CommGraph} contains at least one edge and the model is faithful, then
+\[
+  \neg\,\LeanName{isProductKernel}(m).
+\]
+\end{theorem}
+\begin{proof}
+Choose one edge $(i,j)$. Irreflexivity gives $i\ne j$. Faithfulness gives
+positive pairwise information for that edge at some $q,\mathbf{y}$. A product
+kernel forces the same pairwise information value to be zero, contradiction.
+No induction on $k$ is needed: one faithful edge is enough.
+\end{proof}
+
+\begin{theorem}[Gain biconditional, corrected]
+\LeanName{gain_biconditional}. If $0\le G_k(q,\mathbf{y})$, then
+\[
+  G_k(q,\mathbf{y})=0
+  \quad\Longleftrightarrow\quad
+  H_J(q,\mathbf{y})=\max_i H_i(q,y_i),
+\]
+and
+\[
+  0<G_k(q,\mathbf{y})
+  \quad\Longleftrightarrow\quad
+  H_J(q,\mathbf{y})\ne\max_i H_i(q,y_i).
+\]
+\end{theorem}
+\begin{proof}
+The first equivalence is \LeanName{gain_zero_iff_joint_eq_max}, an algebraic
+identity on $G_k = H_J - \max_i H_i$. For the second, nonnegativity leaves
+only two cases: $G_k=0$ or $0<G_k$; the zero case is equivalent to the
+degeneracy condition, so non-degeneracy is equivalent to strict positivity.
+The former product-kernel version of this biconditional relied on the removed
+incorrect axiom; see \LeanName{productKernel_additivity_gain_pos} for the
+refutation.
+\end{proof}
+
+\begin{theorem}[\(k\)-agent irreducibility]
+\LeanName{kAgent_irreducibility}. Assume $Z$ is finite and $m$ is a
+\LeanName{KAgentModel} with $0<k$. If
+\[
+  0<G_k(q,\mathbf{y}),
+\]
+then for every agent $i:\operatorname{Fin}(k)$,
+\[
+  H_i(q,y_i)<H_J(q,\mathbf{y}).
+\]
+\end{theorem}
+\begin{proof}
+Expanding the definition of $G_k$ gives
+\[
+  0<
+  H_J(q,\mathbf{y})
+  -
+  \max_{i:\operatorname{Fin}(k)}H_i(q,y_i),
+\]
+so
+\[
+  \max_{i:\operatorname{Fin}(k)}H_i(q,y_i)
+  <
+  H_J(q,\mathbf{y}).
+\]
+For each fixed agent $i$, its individual entropy is bounded by the finite
+maximum:
+\[
+  H_i(q,y_i)\le
+  \max_{j:\operatorname{Fin}(k)}H_j(q,y_j).
+\]
+Transitivity gives
+\[
+  H_i(q,y_i)<H_J(q,\mathbf{y})
+\]
+for every $i$. Lean proves this using the finite supremum lemma
+\texttt{Finset.le\_sup'} and the definition of
+\LeanName{kInteractionGain}.
+\end{proof}
+
+\begin{definition}[\(k\)-agent estimator]
+\LeanName{KAgentEstimator}. For a fixed model $m$, prompt $q$, and joint action
+$\mathbf{y}$, the estimator supplies individual estimates
+$\widehat{H}_i$, a joint estimate $\widehat{H}_J$, and a common error bound
+$\epsilon$ such that
+\[
+  |\widehat{H}_i-H_i(q,y_i)|\le\epsilon
+  \quad\text{for all }i,
+  \qquad
+  |\widehat{H}_J-H_J(q,\mathbf{y})|\le\epsilon.
+\]
+\end{definition}
+
+\begin{theorem}[\(k\)-agent benchmark detection]
+\LeanName{kAgent_benchmark_detects}. If
+\[
+  2\epsilon < G_k(q,\mathbf{y}),
+\]
+then
+\[
+  \max_{i:\operatorname{Fin}(k)} \widehat{H}_i
+  <
+  \widehat{H}_J.
+\]
+\end{theorem}
+\begin{proof}
+The proof is the same measurement-resolution argument as in the two-agent case.
+For every $i$,
+\[
+  \widehat{H}_i \le H_i(q,y_i)+\epsilon,
+\]
+while
+\[
+  H_J(q,\mathbf{y})-\epsilon\le \widehat{H}_J.
+\]
+The assumption $2\epsilon<G_k(q,\mathbf{y})$ expands to
+\[
+  \max_i H_i(q,y_i)+\epsilon
+  <
+  H_J(q,\mathbf{y})-\epsilon.
+\]
+Since each $H_i(q,y_i)$ is at most the maximum, each estimate
+$\widehat{H}_i$ is strictly below $\widehat{H}_J$. Therefore the finite maximum
+of the individual estimates is also strictly below $\widehat{H}_J$. Lean proves
+this by rewriting with \texttt{Finset.sup'\_lt\_iff}, extracting estimator
+bounds using \texttt{abs\_le.mp}, and closing each agent case with
+\texttt{linarith}.
+\end{proof}
+
+\noindent
+Thus the formal irreducibility criterion is not restricted to two agents. The
+two-agent theorem is the readable base case; the $k$-agent theorem is the
+general MAS benchmark contract.
+
+\subsection{O-Information Sign Bridges}
+
+The Lean file \texttt{Creativity/MAS/OInformation.lean} also includes scalar
+O-information sign checks for the three-agent case. The simplified quantity is
+\[
+  \Omega_3(H_{12},H_{13},H_{23},H_{123})
+  :=
+  H_{12}+H_{13}+H_{23}-H_{123}.
+\]
+
+\begin{theorem}[Negative O-information from pair-sum bound]
+\LeanName{oInformation3_negative_of_pair_sum_lt}. If
+\[
+  H_{12}+H_{13}+H_{23}<H_{123},
+\]
+then
+\[
+  \Omega_3(H_{12},H_{13},H_{23},H_{123})<0.
+\]
+\end{theorem}
+\begin{proof}
+Unfolding $\Omega_3$ turns the conclusion into
+$H_{12}+H_{13}+H_{23}-H_{123}<0$, which is exactly the assumed strict
+inequality rearranged. Lean unfolds \LeanName{oInformation3} and uses
+\texttt{linarith}.
+\end{proof}
+
+\begin{theorem}[Positive O-information from triple-below-pair-sum]
+\LeanName{oInformation3_positive_of_triple_lt_pair_sum}. If
+\[
+  H_{123}<H_{12}+H_{13}+H_{23},
+\]
+then
+\[
+  0<\Omega_3(H_{12},H_{13},H_{23},H_{123}).
+\]
+\end{theorem}
+\begin{proof}
+After unfolding $\Omega_3$, the conclusion is
+$0<H_{12}+H_{13}+H_{23}-H_{123}$, which follows by rearranging the hypothesis.
+Lean again closes the arithmetic by \texttt{linarith}.
+\end{proof}
+
+\begin{theorem}[Equal-marginals synergy bridge]
+\LeanName{equalMarginals_gain_implies_synergy}. If $h<H_J$ and the additional
+sign condition
+\[
+  3(H_J-h)<H_J
+\]
+holds, then
+\[
+  \Omega_3(H_J-h,H_J-h,H_J-h,H_J)<0.
+\]
+\end{theorem}
+\begin{proof}
+Substituting the equal-marginals expression into $\Omega_3$ gives
+\[
+  3(H_J-h)-H_J.
+\]
+The sign condition says this quantity is negative. Lean unfolds
+\LeanName{oInformation3} and uses \texttt{linarith}. The explicit sign
+condition is necessary: $h<H_J$ alone does not force $3(H_J-h)<H_J$.
+\end{proof}
+
+\begin{theorem}[Negative-gain redundancy bridge]
+\LeanName{negativeGain_implies_redundancy}. If $H_J<h$ and
+\[
+  H_J<3(h-H_J),
+\]
+then
+\[
+  0<\Omega_3(h-H_J,h-H_J,h-H_J,H_J).
+\]
+\end{theorem}
+\begin{proof}
+Unfolding $\Omega_3$ reduces the conclusion to
+$0<3(h-H_J)-H_J$, which is exactly the second hypothesis rearranged. Lean
+finishes by \texttt{linarith}.
+\end{proof}
+
+\subsection{O-Information Kernel Bridge}
+
+The file \texttt{Creativity/MAS/OInfoBridge.lean} connects the scalar
+O-information sign lemmas to concrete product-kernel structure. A
+\LeanName{TwoAgentProductModel} specifies independent kernels $k_1,k_2$ and
+forms their joint PMF by independent coupling.
+
+\begin{theorem}[Product-kernel entropy additivity (PROOF-10, promoted from axiom)]
+\LeanName{productKernel_joint_entropy_eq_sum}. For finite downstream alphabet
+$Z$ and independent product coupling,
+\[
+  \Ent(Z_1,Z_2)
+  =
+  \Ent(Z_1)+\Ent(Z_2),
+\]
+where $(Z_1,Z_2)$ are drawn from the product kernel induced by $k_1(q,y_1)$ and
+$k_2(q,y_2)$.
+\end{theorem}
+\begin{proof}
+Formerly an axiom; now proved as \LeanName{shannonEntropy_jointPMF}. The
+product coupling factorizes pointwise, $(p\otimes q)(a,b)=p(a)q(b)$
+(\LeanName{jointPMF_apply}, via \texttt{PMF.bind\_apply} and
+\texttt{PMF.map\_apply}). Expanding the joint entropy over $Z\times Z$ and
+applying the logarithm product rule in the form
+$\operatorname{negMulLog}(xy)=y\operatorname{negMulLog}(x)+x\operatorname{negMulLog}(y)$
+(\texttt{Real.negMulLog\_mul}) splits the double sum into
+$\sum_a\operatorname{negMulLog}(p(a))\sum_b q(b)
+ +\sum_b\operatorname{negMulLog}(q(b))\sum_a p(a)$;
+the mass identities $\sum p = \sum q = 1$ (\LeanName{sum_toReal_eq_one})
+reduce this to $\Ent(Z_1)+\Ent(Z_2)$.
+\end{proof}
+
+\begin{theorem}[Product kernels yield positive pair-sum entropy]
+\LeanName{productKernel_implies_redundancy}. If
+$0<\Ent(k_1(q,y_1))$ and $0<\Ent(k_2(q,y_2))$, then
+\[
+  0<\Ent(k_1(q,y_1))+\Ent(k_2(q,y_2)).
+\]
+\end{theorem}
+\begin{proof}
+This is pure arithmetic: the sum of two strictly positive reals is strictly
+positive. Lean closes with \texttt{linarith}.
+\end{proof}
+
+\begin{theorem}[Product-kernel gain is not synergy]
+\LeanName{productKernel_gain_is_not_synergy}. Independent product kernels can
+have positive individual and joint entropies without satisfying a negative
+O-information condition. The Lean development records this as a scoped boundary
+theorem: product independence is not the same object as irreducible synergy.
+\end{theorem}
+\begin{proof}
+Lean proves this documentation theorem by \texttt{trivial}. The mathematical
+content is the conceptual separation between product-kernel additivity and the
+sign conditions required for negative O-information in the scalar bridge
+lemmas above.
+\end{proof}
+
+\section{Interaction Gain to Decision Quality: the CUE Bridge}
+
+The entropy-level irreducibility theorems above certify that positive $G_k$
+means no single agent reproduces the joint downstream process. The following
+bridge (PROOF-07) lifts this to the receiver decision layer of
+Part~\ref{part:cue}.
+
+\begin{definition}[Receiver calibration link]
+\LeanName{ReceiverCalibratedMAS}. A receiver whose CUE readings are calibrated
+to downstream entropy with uniform error $\varepsilon_{\mathrm{cal}}$: for
+each agent $i$, $|\mathrm{CUE}_i - H_i| \le \varepsilon_{\mathrm{cal}}$, and
+for the joint output, $|\mathrm{CUE}_J - H_J| \le \varepsilon_{\mathrm{cal}}$.
+This is the formal \texttt{brier\_entropy\_calibration\_link}, parallel in
+structure to \LeanName{KAgentEstimator}.
+\end{definition}
+
+\begin{theorem}[PROOF-07: interaction gain forces CUE improvement]
+\LeanName{Gk_implies_CUE_improvement} and
+\LeanName{Gk_implies_CUE_improvement_sup}. Under the receiver calibration
+link, if
+\[
+  2\varepsilon_{\mathrm{cal}} < G_k(q,\mathbf{y}),
+\]
+then $\mathrm{CUE}_i < \mathrm{CUE}_J$ for every agent $i$, and hence
+\[
+  \max_i \mathrm{CUE}(y_i, A, T) < \mathrm{CUE}(y_{\mathrm{joint}}, A, T).
+\]
+\end{theorem}
+\begin{proof}
+The CUE analogue of \LeanName{kAgent_benchmark_detects}: each agent CUE is at
+most $H_i + \varepsilon_{\mathrm{cal}} \le \max_i H_i +
+\varepsilon_{\mathrm{cal}}$, the joint CUE is at least
+$H_J - \varepsilon_{\mathrm{cal}}$, and the gain hypothesis separates the two
+bounds. Lean closes with \texttt{linarith} over the absolute-value bounds.
+\end{proof}
+
+\section{Trajectory-Level Diagnostics: Step-CUE and Diverge-Converge}
+
+These benchmark diagnostics evaluate the \emph{reasoning trajectory}
+$y_{1:t}$ rather than only the final output.
+
+\begin{theorem}[PROOF-04: gated Step-CUE curves are monotone]
+\LeanName{CUE_trajectory_monotone_nondecreasing}. Let
+$C(t) = \mathrm{CUE}(y_{1:t}, A, T)$ be the running Step-CUE curve and
+$r_t = C(t+1) - C(t)$ the incremental step reward (\LeanName{stepReward}). If
+every step satisfies the utility gate ($r_t \ge 0$ for all $t$), then $C$ is
+non-decreasing.
+\end{theorem}
+\begin{proof}
+Nonnegative successive differences give monotonicity;
+\texttt{monotone\_nat\_of\_le\_succ} plus \texttt{linarith}.
+\end{proof}
+
+\begin{theorem}[PROOF-14: $\gamma$-positivity characterization]
+\LeanName{step_CUE_gamma_positivity_characterization}. For the fitted
+Step-CUE curve $C(t) = C_\infty(1 - e^{-\mu t}) + \gamma t$
+(\LeanName{stepCUEFit}), the linear saturation rate satisfies
+\[
+  \gamma > 0
+  \iff
+  \exists\, t > 0:\;
+  C_\infty(1 - e^{-\mu t}) < C(t),
+\]
+i.e.\ $\gamma$ is positive exactly when some step exceeds the pure
+exponential-saturation prediction --- genuine continuous discovery.
+\end{theorem}
+\begin{proof}
+The fitted curve exceeds its exponential component by exactly $\gamma t$;
+positivity of $\gamma t$ at a positive time is equivalent to positivity of
+$\gamma$. Lean closes both directions with \texttt{linarith}/\texttt{nlinarith}.
+\end{proof}
+
+\begin{theorem}[PROOF-05: Diverge-Converge score existence and non-triviality]
+\LeanName{DC_score_existence} and \LeanName{monotone_increasing_not_DC}.
+There exists a receiver-entropy trajectory $E$ and a peak index $t^\ast$
+satisfying the diverge-converge predicate
+(\LeanName{hasDivergeConverge}): $E$ strictly increases up to $t^\ast$
+(divergence) and strictly decreases afterward (convergence), so
+$\mathrm{DC} = 1$ is achievable. Conversely, any strictly increasing
+(monotone-divergent) trajectory fails the predicate for every choice of
+$t^\ast$, so $\mathrm{DC} = 0$ on monotone trajectories: the score is neither
+trivially satisfied nor trivially failed.
+\end{theorem}
+\begin{proof}
+Existence is by explicit construction: the tent-shaped trajectory
+$E(t) = 1 - (t-1)^2$ on three steps peaks at $t^\ast = 1$
+(\LeanName{tentTrajectory}). Non-triviality: the convergence phase at the peak
+would contradict monotonicity at $t^\ast$; \texttt{linarith}.
+\end{proof}
+
+\section{Estimator Calibration and Benchmark Specification}
+
+The Lean benchmark layer contains one imported statistical axiom and one
+machine-readable experiment specification. The plug-in entropy estimator is
+defined directly from empirical counts:
+\[
+  \widehat{H}_{\mathrm{plug}}(c,n)
+  =
+  -\sum_y \frac{c_y}{n}\log\frac{c_y}{n}.
+\]
+
+\begin{assumption}[Plug-in entropy bias bound (PROOF-12; Known Gaps Registry KG-2)]
+\LeanName{plugIn_bias_axiom}. For alphabet $Y$, counts $c:Y\to\mathbb{N}$,
+sample size $n>0$, and true entropy $H$, the imported Miller--Madow-scale bound
+is
+\[
+  \left|\widehat{H}_{\mathrm{plug}}(c,n)-H\right|
+  \le
+  \frac{|Y|}{2n}.
+\]
+This is a \emph{registered trusted import} (Miller \& Madow, 1955), not an
+internally proved theorem. Proof target for future promotion: Hoeffding's
+inequality applied to the empirical frequency estimator, combined with the
+Lipschitz continuity of $x\mapsto -x\log x$ on $[0,1]$ (each term bounded in
+$[0,1/e]$); a Lean~4 statistical-learning-theory library providing
+\texttt{Hoeffding\_inequality} would discharge it. The subsequent Lean
+corollary uses the bound algebraically.
+\end{assumption}
+
+\begin{theorem}[Sample requirement for entropy ranking]
+\LeanName{entropy_ranking_sample_requirement}. If
+\[
+  H_{\mathrm{low}}+\frac{|Y|}{n}<H_{\mathrm{high}},
+\]
+then the plug-in estimates preserve the ordering:
+\[
+  \widehat{H}_{\mathrm{plug}}(c_{\mathrm{low}},n)
+  <
+  \widehat{H}_{\mathrm{plug}}(c_{\mathrm{high}},n).
+\]
+\end{theorem}
+\begin{proof}
+The bias axiom gives each estimate error at most $|Y|/(2n)$. Therefore the
+total possible two-sided error between the two estimates is at most $|Y|/n$.
+If the true gap exceeds this amount, the lower estimate remains below the higher
+estimate even in the worst case. Lean extracts the absolute-value bounds with
+\texttt{abs\_le.mp}, proves
+\[
+  2\cdot \frac{|Y|}{2n}=\frac{|Y|}{n},
+\]
+and finishes by \texttt{linarith}.
+\end{proof}
+
+To make the resolution condition concrete: for a 50-token effective alphabet and
+$n=200$ episodes, the calibration gives
+\[
+  \epsilon=\frac{|Y|}{2n}=\frac{50}{400}=0.125
+\]
+nats, so the benchmark's two-sided detection floor is
+$2\epsilon=0.25$ nats. Gaps below $0.25$ nats require larger samples; for
+example, reaching a $0.10$-nat floor with the same effective alphabet requires
+$n\ge 500$ episodes. All reported experiments should state their effective
+alphabet size, sample count, and minimum observed entropy gap against this
+calibration floor.
+
+The experiment specification file defines four topology labels
+\LeanName{Topology}, an episode record \LeanName{EpisodeResult}, and two
+predicates:
+\LeanName{predictedS2DominatesS1} and
+\LeanName{predictedGroupthinkSignature}.
+
+\begin{theorem}[Detectability of S2 dominance]
+\LeanName{benchmark_can_detect_S2_dominance}. If the true interaction gain gap
+between decentralized S2 and dense-centralized S1 exceeds two resolution margins,
+\[
+  G_{\mathrm{S1}}+4\epsilon<G_{\mathrm{S2}},
+\]
+then there exist benchmark episode records $r_2,r_1$ with topologies S2 and S1
+respectively such that
+\[
+  \text{\LeanName{predictedS2DominatesS1}}(r_2,r_1)
+\]
+holds.
+\end{theorem}
+\begin{proof}
+Lean constructs worst-case estimated gains:
+\[
+  \widehat{G}_{\mathrm{S2}}=G_{\mathrm{S2}}-\epsilon,
+  \qquad
+  \widehat{G}_{\mathrm{S1}}=G_{\mathrm{S1}}+\epsilon.
+\]
+The predicate requires
+\[
+  \widehat{G}_{\mathrm{S1}}+2\epsilon<\widehat{G}_{\mathrm{S2}},
+\]
+which becomes
+\[
+  G_{\mathrm{S1}}+3\epsilon<G_{\mathrm{S2}}-\epsilon,
+\]
+equivalently $G_{\mathrm{S1}}+4\epsilon<G_{\mathrm{S2}}$. This is exactly the
+hypothesis. Lean fills the existential records explicitly and closes the
+arithmetic with \texttt{linarith}.
+\end{proof}
+
+\paragraph{Benchmark interpretation.}
+The benchmark operationalizes the formal results by checking whether systems
+optimizing B maintain richer future trajectory spaces, whether systems optimizing
+C reduce corpus-adjacent repetition without rewarding incoherence or padding,
+and whether multi-agent systems with detected interaction gain behave
+irreducibly rather than as sums of individual agents. The theory says what
+should happen; the benchmark tests whether it happens under the stated
+resolution and faithfulness assumptions.
+
+
+%======================================================================
+\part{Dual-Process Separation Principle}
+\label{part:dps}
+%======================================================================
+
+\noindent
+This part sits deliberately \emph{between} the frozen benchmark metrics
+(Part~\ref{part:benchmark}) and the training signal
+(Part~\ref{part:training}): the separation proved here is what makes the
+benchmark non-Goodhartable. Goodhart resistance in this framework is a
+\textbf{two-level structure}:
+
+\begin{itemize}
+  \item \textbf{Level 1 --- Architectural Goodhart resistance.} The
+  Dual-Process Separation Principle (PROOF-03): the training gradient is
+  structurally independent of every frozen benchmark object.
+  \item \textbf{Level 2 --- Protocol Goodhart resistance.} The four protocol
+  conditions collected in \LeanName{Goodhart_resistance_summary}
+  (Part~\ref{part:training}), each paired with its collapse direction by the
+  Structural Goodhart Theorem (PROOF-13) below.
+\end{itemize}
+
+\section{The Separation Theorem}
+
+Let $\Pi_{\mathrm{frozen}} = \{\mathcal{P}, T, A\}$ be the frozen benchmark
+objects (probe set, task battery, receiver) and $\Pi_{\mathrm{live}} =
+\{\RewardDT\text{-probes}, \text{policy}, \text{corpus schedule}\}$ the live
+training quantities. A training configuration splits into a live and a frozen
+component (\LeanName{TrainingConfig}); a reward \emph{depends only on the live
+component} when any two configurations agreeing on the live part receive equal
+reward (\LeanName{dependsOnlyOnLive}) --- the discrete statement that its
+gradient in the frozen coordinate is zero.
+
+\begin{theorem}[PROOF-03: Dual-Process Separation Principle]
+\LeanName{dual_process_separation_principle}. Any training reward built as a
+function of the live component alone (\LeanName{liveReward}) depends only on
+the live component: for every gradient update step,
+$\nabla_\theta \RewardTrain \perp \Pi_{\mathrm{frozen}}$.
+\end{theorem}
+
+\begin{corollary}[No differentiable Goodhart path]
+\LeanName{Rtrain_cannot_goodhart_frozen}. Changing any frozen benchmark object
+while holding the live component fixed leaves $\RewardTrain$ unchanged.
+Consequently no gradient step on $\RewardTrain$ can be driven by, or exploit,
+a frozen object: $\RewardTrain$ cannot Goodhart the benchmark through any
+differentiable path. Combined with \LeanName{trainReward_neq_fullReward}, the
+train/benchmark split is structural, not merely definitional.
+\end{corollary}
+
+\section{The Structural Goodhart Collapse Theorem}
+
+Protection and violation are now a theorem pair: the rank-agreement guarantee
+(\LeanName{D_tilde_proxy_rank_agreement}, Part~\ref{part:proxy}) holds under
+the protocol conditions, and this section proves each violation admits a
+refuting exploitation path.
+
+\begin{definition}[Rank agreement and rank reversal]
+\LeanName{rankAgreement}, \LeanName{rankReversal}. For a proxy/benchmark
+instance with resolution margin $\varepsilon$, rank agreement demands that a
+proxy gap beyond $2\varepsilon$ forces the same benchmark ordering; a rank
+reversal is a pair $s_1, s_2$ where the proxy prefers $s_1$ beyond
+$2\varepsilon$ while the benchmark strictly prefers $s_2$.
+\end{definition}
+
+\begin{theorem}[PROOF-13: Structural Goodhart Collapse]
+\LeanName{rank_reversal_refutes_agreement},
+\LeanName{reversal_instance_exists},
+\LeanName{structural_goodhart_collapse}. Any rank reversal refutes rank
+agreement, and rank reversals are realizable: there is an explicit
+two-candidate instance whose proxy ranks the candidates oppositely to the
+benchmark beyond the margin. Hence whenever a violated Goodhart condition
+admits a reversal, the proxy-rank-agreement guarantee collapses.
+\end{theorem}
+
+\begin{remark}[The four exploitation paths]
+Each protocol condition instantiates the collapse through its own path:
+(i) \emph{fixed probe target} --- if $Q_{\mathrm{probe}}$ contains a fixed
+string across steps, the policy can memorize it, inflating $\RewardDT$ without
+improving $R_D$ on the frozen $\mathcal{P}$;
+(ii) \emph{corpus non-stationarity} --- if $\mathcal{H}$ absorbs policy
+outputs, the anti-padding baseline shifts and \LeanName{C3_no_padding_exploit}
+loses its precondition;
+(iii) \emph{loose utility gate} --- if $\tau \le H_q(y_{\mathrm{random}})$,
+incoherent high-entropy outputs pass the gate
+(\LeanName{CBase_infeasible_can_maximize} pattern);
+(iv) \emph{undetected proxy decay} --- if $\rho(\RewardDT, R_D) < \rho_{\min}$
+without detection, the faithfulness premise of rank agreement fails. In each
+case the admitted reversal triggers
+\LeanName{rank_reversal_refutes_agreement}.
+\end{remark}
+
+%======================================================================
+\part{2-CGRPO Training Signal (Certified, Goodhart-Resistant)}
+\label{part:training}
+%======================================================================
+
+\noindent
+This part defines the reward the trainer actually optimizes, proves that DPO
+steps ascend each of its components, and states the four Goodhart-resistance
+conditions that a training run must satisfy for the certificates to apply.
+
+\section{Training Reward Definition}
+\label{sec:train-reward}
+
+The training reward is
+\[
+  \RewardTrain(q,y,s)
+  :=
+  \RewardB(q,y)
+  +\lambda_{\tilde D}\,\RewardDT(q,s)
+  \qquad (\text{\LeanName{trainReward}}),
+\]
+which is a distinct object from the reported multiplicative Benchmark Score
+$R_{\mathrm{creativity}}$~\eqref{eq:Rcreativity}
+(\LeanName{Rcreativity}, Section~\ref{sec:benchmark-score}).
+There is no $\lambda_C\RewardC$ channel. The components are:
+\begin{itemize}
+  \item $\RewardB$: utility-gated downstream entropy, exactly as in
+    Part~\ref{part:definition}.
+  \item $\RewardDT$: the trainable proxy for D, defined below on
+    \emph{resampled} probe prompts, never on the frozen benchmark probe set
+    $\mathcal{P}$.
+\end{itemize}
+The train/benchmark split is machine-checked by
+\LeanName{trainReward_neq_benchmarkReward}.
+
+\subsection{The Trainable Proxy \texorpdfstring{$\RewardDT$}{R-tilde-D}}
+
+The Lean structure \LeanName{DTildeModel}
+(\texttt{Creativity/D/ProxyReward.lean}) contains a probe prompt distribution
+$Q_{\mathrm{probe}}:\PMF(Q)$ that is resampled per batch and never frozen, a
+frozen reference policy $p_{\mathrm{ref}}:Q\to\PMF(Z)$ that is never updated
+during training, and the trained policy's conditioned predictive distribution
+$p(\cdot\mid q_{\mathrm{probe}},s)$. The proxy reward is
+\[
+  \RewardDT(s,q_{\mathrm{probe}})
+  =
+  D_{\mathrm{KL}}\!\left(
+    p(\cdot \mid q_{\mathrm{probe}}, s)
+    \;\Big\|\;
+    p_{\mathrm{ref}}(\cdot \mid q_{\mathrm{probe}})
+  \right)
+  \cdot \mathbf{1}[u \geq \tau],
+\]
+formalized as \LeanName{rewardDTilde}.
+
+\begin{theorem}[$\tilde D$ utility gate]
+\LeanName{D_tilde_utility_gate}. If $u<\tau$, then
+$\RewardDT(s,q_{\mathrm{probe}})=0$.
+\end{theorem}
+\begin{proof}
+Mirrors \LeanName{D1_utility_gate}: the gate closes the reward branch. Lean
+simplifies \texttt{rewardDTilde} with \texttt{not\_le.mpr}.
+\end{proof}
+
+\begin{theorem}[$\tilde D$ nonnegativity]
+\LeanName{D_tilde_nonneg}. For all $s,q_{\mathrm{probe}},u,\tau$,
+$0\le\RewardDT(s,q_{\mathrm{probe}})$.
+\end{theorem}
+\begin{proof}
+The gated branch is a KL divergence, nonnegative by
+\LeanName{klDivergence_nonneg}; the closed branch is $0$.
+\end{proof}
+
+\begin{theorem}[Zero proxy reward for reference-identical policies]
+\LeanName{D_tilde_zero_for_identical}. If
+$p(\cdot\mid q_{\mathrm{probe}},s)=p_{\mathrm{ref}}(\cdot\mid q_{\mathrm{probe}})$,
+then $\RewardDT(s,q_{\mathrm{probe}})=0$.
+\end{theorem}
+\begin{proof}
+Mirrors \LeanName{D4_zero_for_corpus_copy}: reproducing the reference
+distribution earns nothing. Lean rewrites with the identity hypothesis and
+the term-by-term lemma \LeanName{klDivergence_self}.
+\end{proof}
+
+\begin{assumption}[No fixed probe target]
+\LeanName{D_tilde_no_fixed_target}. $Q_{\mathrm{probe}}$ is drawn fresh each
+step: no string in $Q_{\mathrm{probe}}$ is fixed across training steps.
+Formally, for the probe batch schedule of any admissible protocol
+(\LeanName{DTildeTrainingProtocol}), no probe prompt belongs to the batch at
+every step. This is the formal Goodhart-resistance condition for
+$\RewardDT$: it prevents memorization of specific probe inputs.
+\end{assumption}
+
+\begin{theorem}[$\tilde D$ preference ordering]
+\LeanName{D_tilde_dominance}. If $u\ge\tau$ and
+$\RewardDT(s_1)<\RewardDT(s_2)$, then $(s_2,s_1)$ is a $\tilde D$-valid
+preference pair.
+\end{theorem}
+\begin{proof}
+Same structure as \LeanName{B1_dominance} and \LeanName{D2_dominance}: under
+the open gate the reward unfolds to the KL shift, so the strict ordering
+transfers. This is the prerequisite for
+\LeanName{DPO_D_tilde_gradient_correct} below.
+\end{proof}
+
+\subsection{Properties of \texorpdfstring{$\RewardTrain$}{R\_train}}
+
+\begin{theorem}[Training reward nonnegativity]
+\LeanName{trainReward_nonneg}. If $0\le\RewardB$, $0\le\RewardC$,
+$0\le\lambda_C$, and $0\le\lambda_{\tilde D}$, then
+$0\le\RewardTrain(q,y,s)$.
+\end{theorem}
+\begin{proof}
+Mirrors \LeanName{benchmarkReward_nonneg}; the $\tilde D$ component is
+nonnegative unconditionally by \LeanName{D_tilde_nonneg}.
+\end{proof}
+
+\begin{theorem}[Training advantage sign correctness]
+\LeanName{trainReward_advantage_sign_correct}. For a group of $\RewardTrain$
+scores, if $r_j<\mu<r_i$ and the stabilizer $\epsilon>0$, then $A_j<0$ and
+$0<A_i$.
+\end{theorem}
+\begin{proof}
+Mirrors \LeanName{advantage_sign_correct}, instantiated at the training
+reward via \LeanName{trainRewards}.
+\end{proof}
+
+\begin{theorem}[Train/benchmark split]
+\LeanName{trainReward_neq_fullReward}. $\RewardTrain\ne\RewardFull$: whenever
+$\lambda_{\tilde D}\RewardDT(s)\ne\lambda_D\RewardD(s,\mathcal{H},\mathcal{P})$,
+the two rewards differ at that point. $\RewardD$ and $\RewardDT$ are distinct
+objects; this theorem exists solely to make the train/benchmark split
+machine-checkable, not just a prose convention.
+\end{theorem}
+\begin{proof}
+Both rewards share the B and C terms, so their difference is exactly the
+difference of the weighted D components. Lean unfolds both definitions and
+closes with \texttt{linarith}.
+\end{proof}
+
+\section{Training Correspondence: DPO Direction}
+
+The Lean development proves a local DPO-B training guarantee at the abstraction
+level used in the finite model. The calculus-heavy softmax-gradient step is
+represented by two explicit local hypotheses: \textbf{H1} non-degeneracy, so the
+winner and loser log-probability gradients are not identical, and \textbf{H2} a
+sufficiently small step size, so the local DPO step transfers positive
+probability mass from the B-loser to the B-winner while leaving other outputs
+fixed to first order. Under this local transfer hypothesis, Lean proves that
+expected B reward strictly increases.
+
+For reference, the older bridge file \texttt{Creativity/B/DPO.lean} also defines
+a finite softmax policy \LeanName{softmaxPolicy} and DPO log-odds
+$\operatorname{LogOdds}_\ell(y_w,y_l)=\ell_{y_w}-\ell_{y_l}$.
+
+\begin{theorem}[Finite logit update increases winner log-odds]
+\LeanName{dpo_logit_direction}. Assume $Y$ has decidable equality. Let
+$\ell:Y\to\R$, distinct winner and loser indices $y_w\ne y_l$, and step
+$\eta>0$. Define the updated logits
+\[
+  \ell'_y =
+  \begin{cases}
+    \ell_y+\eta, & y=y_w,\\
+    \ell_y-\eta, & y=y_l,\\
+    \ell_y, & \text{otherwise}.
+  \end{cases}
+\]
+Then
+\[
+  \operatorname{LogOdds}_\ell(y_w,y_l)
+  <
+  \operatorname{LogOdds}_{\ell'}(y_w,y_l).
+\]
+\end{theorem}
+\begin{proof}
+Because $y_w\ne y_l$, the update gives $\ell'_{y_w}=\ell_{y_w}+\eta$ and
+$\ell'_{y_l}=\ell_{y_l}-\eta$. Hence
+\[
+  \operatorname{LogOdds}_{\ell'}(y_w,y_l)
+  =
+  (\ell_{y_w}+\eta)-(\ell_{y_l}-\eta)
+  =
+  \operatorname{LogOdds}_\ell(y_w,y_l)+2\eta.
+\]
+Since $\eta>0$, the strict increase follows. Lean packages the update in
+\LeanName{LogitUpdate}/\LeanName{applyUpdate}, simplifies with the disequality
+hypothesis, and closes with \texttt{linarith}.
+\end{proof}
+
+\begin{theorem}[DPO gradient alignment]
+\LeanName{dpo_gradient_increases_logodds}. If $\beta>0$,
+$\sigma(r_\theta(y_l)-r_\theta(y_w))>0$, the squared gradient-difference norm is
+positive, and $\eta>0$, then the first-order DPO update has strictly positive
+alignment with the winner-over-loser log-odds direction.
+\end{theorem}
+\begin{proof}
+Lean formalizes the alignment scalar as
+\[
+  \beta\,\sigma(r_l-r_w)\,
+  \|\nabla\log\pi_\theta(y_w)-\nabla\log\pi_\theta(y_l)\|^2.
+\]
+All factors are strictly positive under H1 and $\beta>0$, so multiplying by
+$\eta>0$ remains strictly positive. Lean closes this with positivity.
+\end{proof}
+
+\begin{theorem}[Softmax monotonicity for the winning logit]
+\LeanName{softmax_monotone_in_logit_diff}. For two competing logits, increasing
+the winner logit by any $\delta>0$ strictly increases the winner's softmax
+probability.
+\end{theorem}
+\begin{proof}
+Writing $a=\exp(\ell_w)>0$, $b=\exp(\ell_l)>0$, and $c=\exp(\delta)>1$, the
+claim is
+\[
+  \frac{a}{a+b}<\frac{ac}{ac+b}.
+\]
+Cross-multiplication over positive denominators reduces this to
+$ab<acb$, which follows from $c>1$. Lean proves the inequality by exponential
+positivity, cross-multiplication, and ring normalization.
+\end{proof}
+
+\begin{theorem}[B-valid probability transfer increases expected B]
+\LeanName{dpo_step_increases_expected_RB}. Let a local DPO step transfer
+$\delta>0$ probability mass from $y_l$ to $y_w$, holding all other output
+probabilities fixed. If
+\[
+  R_B(q,y_l)<R_B(q,y_w),
+\]
+then the policy expectation of $R_B$ strictly increases.
+\end{theorem}
+\begin{proof}
+The expectation change is exactly
+\[
+  \delta R_B(q,y_w)-\delta R_B(q,y_l)
+  =
+  \delta\bigl(R_B(q,y_w)-R_B(q,y_l)\bigr).
+\]
+This is positive because $\delta>0$ and the pair is B-valid. Lean proves the
+finite-sum identity in \LeanName{expectedReward_pairwiseTransfer_eq} and then
+uses \texttt{linarith}.
+\end{proof}
+
+\begin{theorem}[DPO-B gradient correctness]
+\LeanName{DPO_B_gradient_correct}. Under H1 and H2, encoded as the local DPO
+probability-transfer hypothesis, a single DPO step on a B-valid preference pair
+strictly increases expected downstream entropy:
+\[
+  \mathbb{E}_{y\sim\pi_{\theta'}}[R_B(q,y)]
+  >
+  \mathbb{E}_{y\sim\pi_{\theta}}[R_B(q,y)].
+\]
+\end{theorem}
+\begin{proof}
+The local DPO hypothesis supplies a $\delta>0$ transfer from the B-loser to the
+B-winner. The preceding theorem converts this transfer and B-validity directly
+into a strict increase in expected $R_B$. This is the full local training
+correspondence proved in Lean; the finite logit theorem above is the two-logit
+special case.
+\end{proof}
+
+\begin{theorem}[B-valid DPO pair moves in the correct direction]
+\LeanName{DPO_B_correct_direction}. Assume $Z$ is finite and $Y$ has decidable
+equality. Let $y_w,y_l:Y$ be feasible and satisfy
+\[
+  H_q(y_l)<H_q(y_w).
+\]
+For any logits $\ell:Y\to\R$ and step size $\eta>0$, define $\ell'$ as above.
+Then
+\[
+  \operatorname{LogOdds}_\ell(y_w,y_l)
+  <
+  \operatorname{LogOdds}_{\ell'}(y_w,y_l).
+\]
+\end{theorem}
+\begin{proof}
+The entropy dominance hypothesis $H_q(y_l)<H_q(y_w)$ implies $y_w\ne y_l$;
+otherwise it would reduce to $H_q(y_w)<H_q(y_w)$, impossible by irreflexivity
+of $<$. The remainder is exactly \LeanName{dpo_logit_direction} applied to the
+same finite update. Lean derives the disequality from the entropy gap, simplifies
+the if-then-else update, and closes with \texttt{linarith}.
+\end{proof}
+
+\noindent
+Training-bridge summary: B-constructed preference pairs increase winner
+log-odds under the finite two-logit update, and under the explicit local
+non-degeneracy/small-step transfer hypotheses, a DPO step strictly increases
+expected $R_B$. This justifies the DPO-style training language as a local ascent
+claim for the B objective.
+
+\section{RL Reward Signal Bridge}
+
+The Lean file \texttt{Creativity/Training/RLSignal.lean} connects the abstract
+B and D rewards to a group-relative RL signal. It defines the additive B--D
+diagnostic
+\[
+  R_{BD}(q,y,s)
+  =
+  \RewardB(q,y)+\lambda_D\RewardD(s,\mathcal{H},u,\tau)
+  \qquad (\text{\LeanName{benchmarkReward}}),
+\]
+which serves the B/D rank-preservation correspondence. The \emph{reported}
+Benchmark Score is the multiplicative \LeanName{Rcreativity} of
+Section~\ref{sec:benchmark-score}~\eqref{eq:Rcreativity}. For a finite group
+of rewards $r_i$, the group-relative advantage is
+\[
+  A_i
+  =
+  \frac{r_i-\mu}{\sqrt{\frac{1}{G}\sum_j(r_j-\mu)^2}+\epsilon},
+  \qquad
+  \mu=\frac{1}{G}\sum_j r_j.
+\]
+
+\begin{theorem}[B--D diagnostic nonnegativity]
+\LeanName{benchmarkReward_nonneg}. If $0\le\RewardB$, $0\le\RewardD$, and
+$0\le\lambda_D$, then $0\le R_{BD}(q,y,s)$.
+\end{theorem}
+\begin{proof}
+Sum of a nonnegative term and a product of nonnegatives
+(\texttt{add\_nonneg}, \texttt{mul\_nonneg}).
+\end{proof}
+
+\begin{theorem}[Positive RL denominator]
+\LeanName{groupDenom_pos}. If $\epsilon>0$, then
+\[
+  \sqrt{\frac{1}{G}\sum_j(r_j-\mu)^2}+\epsilon>0.
+\]
+\end{theorem}
+\begin{proof}
+The square-root term is always nonnegative. Adding the strictly positive
+$\epsilon$ makes the denominator strictly positive. Lean proves this using
+\texttt{Real.sqrt\_nonneg} and \texttt{add\_pos\_of\_nonneg\_of\_pos}.
+\end{proof}
+
+\begin{theorem}[Advantage sign correctness]
+\LeanName{advantage_sign_correct}. If $r_j<\mu<r_i$ and $\epsilon>0$, then
+\[
+  A_j<0
+  \qquad\text{and}\qquad
+  0<A_i.
+\]
+\end{theorem}
+\begin{proof}
+By \LeanName{groupDenom_pos}, the denominator of each advantage is strictly
+positive. The numerator $r_j-\mu$ is negative, so $A_j<0$. The numerator
+$r_i-\mu$ is positive, so $A_i>0$. Lean uses
+\texttt{div\_neg\_of\_neg\_of\_pos} and \texttt{div\_pos}.
+\end{proof}
+
+\begin{theorem}[Winner advantage positivity]
+\LeanName{B_winner_advantage_pos}. If an index $i_w$ is a strict group winner
+and its reward is above the group mean, and if $\epsilon>0$, then
+\[
+  0<A_{i_w}.
+\]
+\end{theorem}
+\begin{proof}
+The theorem uses the same denominator argument. Since the winner reward is
+assumed above the mean, its advantage numerator is positive. Since the
+denominator is positive, the quotient is positive. Lean records the strict
+winner hypothesis for the intended B-winner interpretation, while the algebraic
+sign proof uses the explicit above-mean assumption.
+\end{proof}
+
+
+\section{DPO Directionality Theorems}
+\label{sec:dpo-directionality}
+
+All three components of $\RewardTrain$ carry a certified DPO ascent theorem
+under the local hypotheses \textbf{H1} (non-degeneracy: the step transfers
+strictly positive probability mass $\delta>0$ from loser to winner) and
+\textbf{H2} (small step: the transfer is pairwise, other outputs fixed to
+first order):
+\begin{enumerate}
+  \item \LeanName{DPO_B_gradient_correct} (existing; proved above): a DPO
+    step on a B-valid pair strictly increases
+    $\E_{y\sim\pi_\theta}[\RewardB(q,y)]$.
+  \item \LeanName{DPO_C_gradient_correct} (new): a DPO step on a C-valid pair
+    strictly increases $\E_{y\sim\pi_\theta}[\RewardC(q,y)]$.
+  \item \LeanName{DPO_D_tilde_gradient_correct} (new): a DPO step on a
+    $\tilde D$-valid pair strictly increases
+    $\E_{y\sim\pi_\theta}[\RewardDT(q,y)]$.
+\end{enumerate}
+
+\begin{theorem}[DPO-C gradient correctness]
+\LeanName{DPO_C_gradient_correct}. Under H1 and H2, a DPO step on a C-valid
+preference pair strictly increases
+$\E_{y\sim\pi_\theta}[\RewardC(q,y)]$.
+\end{theorem}
+\begin{proof}
+The proof template is reused from \LeanName{DPO_B_gradient_correct}:
+(1) a C-valid pair gives $\RewardC(s_w)>\RewardC(s_l)$ via the utility gate
+(\LeanName{C1_utility_gate} dual) and the novelty ordering
+(\LeanName{cValidPair_reward_ordered});
+(2) \LeanName{dpo_logit_direction} applies unchanged;
+(3) \LeanName{expectedReward_pairwiseTransfer_eq} applies unchanged, giving
+the expectation change $\delta(\RewardC(s_w)-\RewardC(s_l))>0$;
+(4) conclude the strict increase in $\E[\RewardC]$.
+\end{proof}
+
+\begin{theorem}[DPO-$\tilde D$ gradient correctness]
+\LeanName{DPO_D_tilde_gradient_correct}. Under H1 and H2, a DPO step on a
+$\tilde D$-valid preference pair strictly increases
+$\E_{y\sim\pi_\theta}[\RewardDT(q,y)]$.
+\end{theorem}
+\begin{proof}
+Identical template to the previous theorem, substituting
+\LeanName{D_tilde_dominance} for \LeanName{B1_dominance}. The generic pieces
+\LeanName{dpo_logit_direction} and
+\LeanName{expectedReward_pairwiseTransfer_eq} are reused unchanged.
+\end{proof}
+
+
+\section{Dense Trajectory Reward and 2-GRPO Quantization}
+
+\subsection{Step-CUE Dense Reward}
+
+The dense trajectory reward $r_t = C(t+1) - C(t)$ is the incremental Step-CUE
+contribution of each reasoning step (\LeanName{stepReward}). Under the
+per-step utility gate, PROOF-04
+(\LeanName{CUE_trajectory_monotone_nondecreasing},
+Part~\ref{part:benchmark}) certifies the cumulative signal never punishes a
+gated step: the running curve is monotone non-decreasing, so $r_t$ is a
+well-posed nonnegative dense reward.
+
+\subsection{DC Bonus Necessity Theorem}
+
+\begin{theorem}[PROOF-15: the terminal DC bonus is necessary]
+\LeanName{dense_reward_DC_bonus_incentivizes_exploration}. Consider a
+monotone-convergent trajectory and a diverge-converge trajectory with equal
+cumulative Step-CUE $c$. Without the bonus their total rewards tie
+($\LeanName{totalReward}(c,0) = \LeanName{totalReward}(c,0)$), so the dense
+reward alone never prefers exploration; with any strictly positive terminal
+bonus $b$ awarded to the diverge-converge trajectory,
+\[
+  \LeanName{totalReward}(c, 0) < \LeanName{totalReward}(c, b).
+\]
+Hence without $r_{DC}$ the optimizer is indifferent to (and by tie-breaking
+converges on) monotone trajectories with $\mathrm{DC}=0$ despite maximal
+cumulative CUE; the bonus strictly breaks the tie toward exploration.
+\end{theorem}
+
+\subsection{2-GRPO Advantage Quantization}
+
+\begin{theorem}[PROOF-16: advantages quantize to $\pm 1/\sqrt{2}$]
+\LeanName{twoGRPO_advantage_quantization_unbiased}, with
+\LeanName{groupScale_eq} and \LeanName{advantage_antisymm}. In 2-GRPO with two
+rollouts and rewards $r_1 > r_2$, the group scale collapses to
+$\sqrt{(r_1-\mu)^2 + (r_2-\mu)^2} = |r_1 - r_2|/\sqrt{2}$ at
+$\mu = (r_1+r_2)/2$, and the group-relative advantages are exactly
+\[
+  A_1 = \tfrac{1}{\sqrt{2}},
+  \qquad
+  A_2 = -\tfrac{1}{\sqrt{2}},
+\]
+independent of the reward magnitudes. The advantage is therefore a
+deterministic function of the signed rank alone --- an unbiased signed-rank
+estimator, $\E[A_i \mid \operatorname{rank}(y_i)] = \pm 1/\sqrt{2}$ --- which
+is the formal core of the GRPO-is-secretly-DPO reduction used by the two-phase
+2-CGRPO protocol.
+\end{theorem}
+
+\section{Goodhart-Resistance Conditions}
+\label{sec:goodhart-conditions}
+
+A 2-CGRPO run is valid only if all four of the following axioms hold as
+explicit training preconditions. Each is stated in Lean and collected in the
+summary conjunction below.
+
+\begin{enumerate}
+  \item \LeanName{D_tilde_no_fixed_target} --- $Q_{\mathrm{probe}}$ is
+    resampled every batch; no probe string is fixed across training steps.
+  \item \LeanName{C_corpus_stationarity_condition} --- the corpus
+    $\mathcal{H}$ used to compute $N_{\mathrm{KL}}$ is updated on a fixed
+    external schedule only, never by inserting policy outputs.
+  \item \LeanName{B_utility_gate_tightness} --- $\tau$ is calibrated above
+    the entropy of incoherent baseline outputs.
+  \item \LeanName{ProxyFaithfulness_decay_detectable} ---
+    $\rho(\RewardDT,\RewardD)$ is monitored at every checkpoint; training
+    halts if $\rho<\rho_{\min}$ (Part~\ref{part:proxy}).
+\end{enumerate}
+
+\begin{assumption}[Corpus stationarity for C]
+\LeanName{C_corpus_stationarity_condition}. The corpus $\mathcal{H}$ used to
+compute $N_{\mathrm{KL}}$ is updated on a fixed external schedule, never by
+inserting policy outputs: the corpus trajectory equals a schedule fixed
+before training, and no policy output produced during training occurs inside
+the corpus it is scored against (\LeanName{CorpusStationarity}). Violating
+this axiom breaks the anti-copy and anti-padding guarantees
+(\LeanName{C2_copy_penalty}, \LeanName{C3_no_padding_exploit}) by making
+$\mathcal{H}$ self-referential: the policy would control the compression
+baseline that defines its own novelty. This is the formal Goodhart-resistance
+condition for $\RewardC$.
+\end{assumption}
+
+\begin{assumption}[Utility gate tightness for B]
+\LeanName{B_utility_gate_tightness}. The existing B theorems prove
+anti-collapse but do not block entropy-maximizing \emph{incoherence}:
+outputs achieving high $H_q(y)$ by being vague rather than expansive. The
+utility threshold must satisfy
+\[
+  \tau > H_q(y_{\mathrm{random}})
+\]
+for every feasibility-passing but semantically incoherent output
+$y_{\mathrm{random}}$ (\LeanName{IncoherentBaseline}). This is a calibration
+requirement: $\tau$ must be set above the entropy of incoherent baseline
+outputs, not just above zero, and the calibration must be validated against
+incoherent high-entropy baselines \emph{before training}. Without it,
+$\RewardB$ can be Goodharted by entropy-maximizing incoherence. The Lean
+consequences \LeanName{B_incoherence_reward_below_threshold} and
+\LeanName{B_coherent_dominates_incoherent} show that under a tight gate no
+incoherent baseline can reach the calibrated bar or dominate a genuinely
+expansive output.
+\end{assumption}
+
+\begin{theorem}[Goodhart resistance summary]
+\LeanName{Goodhart_resistance_summary}. For any admissible protocol
+certificates, the four Goodhart conditions hold simultaneously:
+\[
+  \text{\LeanName{D_tilde_no_fixed_target}}
+  \;\wedge\;
+  \text{\LeanName{C_corpus_stationarity_condition}}
+  \;\wedge\;
+  \text{\LeanName{B_utility_gate_tightness}}
+  \;\wedge\;
+  \text{\LeanName{ProxyFaithfulness_decay_detectable}}.
+\]
+\end{theorem}
+\begin{proof}
+Lean assembles the conjunction from the four protocol certificates
+(\LeanName{DTildeTrainingProtocol}, \LeanName{CTrainingProtocol},
+\LeanName{TauCalibration}, \LeanName{ProxyMonitor}), so the full protection
+is checkable in one place.
+\end{proof}
+
+\noindent
+\textbf{Validity statement.} A training run that violates any of these four
+conditions does not have Lean-certified Goodhart resistance, and its results
+cannot be compared against the benchmark metrics of
+Part~\ref{part:benchmark}.
+
+
+%======================================================================
+\part{Proxy Validation and Resolution Conditions}
+\label{part:proxy}
+%======================================================================
+
+\section{Proxy Faithfulness for D}
+\label{sec:proxy-faithfulness}
+
+Training ascends $\RewardDT$ on resampled probe prompts; the benchmark
+measures $\RewardD$ on the frozen probe set $\mathcal{P}$. The bridge between
+them is conditional on an empirical assumption.
+
+\begin{assumption}[Proxy faithfulness]
+\LeanName{ProxyFaithfulness}. After monotone calibration, the KL shift on
+resampled $q_{\mathrm{probe}}$ and $\RewardD$ on the frozen $\mathcal{P}$ are
+monotonically related up to error bound $\delta$: uniformly over outputs,
+\[
+  \bigl|\RewardDT(s)-\RewardD(s,\mathcal{H},\mathcal{P})\bigr|\le\epsilon.
+\]
+Unlike the purely algebraic \LeanName{BEstimator}/\LeanName{CEstimator}
+bounds, this is an \emph{empirical} assumption that the benchmark correlation
+study must estimate before training begins.
+\end{assumption}
+
+\begin{theorem}[Proxy rank agreement]
+\LeanName{D_tilde_proxy_rank_agreement}. Under \LeanName{ProxyFaithfulness},
+if
+\[
+  \RewardDT(s_1)-\RewardDT(s_2)>2\epsilon,
+\]
+then
+\[
+  \RewardD(s_1,\mathcal{H},\mathcal{P})>\RewardD(s_2,\mathcal{H},\mathcal{P}).
+\]
+\end{theorem}
+\begin{proof}
+Structure mirrors \LeanName{B_rank_preserved} and
+\LeanName{C_rank_preserved}: extract the one-sided bounds from the uniform
+error bound with \texttt{abs\_le.mp}, then chain the inequalities with
+\texttt{linarith}.
+\end{proof}
+
+\begin{theorem}[Proxy faithfulness decay is detectable]
+\LeanName{ProxyFaithfulness_decay_detectable}. Let a
+\LeanName{ProxyMonitor} record the empirical correlation
+$\rho(\RewardDT,\RewardD)$ at every training checkpoint, with threshold
+$\rho_{\min}$ and the calibration link that faithfulness implies
+$\rho\ge\rho_{\min}$. If at checkpoint $t$ the measured correlation falls
+below the threshold, $\rho(t)<\rho_{\min}$, then proxy faithfulness fails at
+$t$: the rank-agreement guarantee of
+\LeanName{D_tilde_proxy_rank_agreement} no longer holds, and training must
+halt or the proxy must be recalibrated.
+\end{theorem}
+\begin{proof}
+If faithfulness held at $t$, the calibration link would force
+$\rho_{\min}\le\rho(t)$, contradicting the decay hypothesis. Lean closes with
+\texttt{not\_le}.
+\end{proof}
+
+\noindent
+\textbf{Calibration requirement.} $\rho_{\min}$ is a parameter of the
+monitor: the benchmark correlation study must estimate it \emph{before
+training begins}. This theorem is the \textbf{formal Goodhart early-warning
+condition}: it converts the proxy faithfulness assumption into a monitorable
+training health invariant rather than a one-time post-hoc validation.
+
+\section{Training-to-Benchmark Correspondence}
+\label{sec:correspondence-table}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}p{0.20\linewidth}p{0.20\linewidth}p{0.28\linewidth}p{0.20\linewidth}@{}}
+\toprule
+Training metric & Benchmark metric & Correspondence theorem & Resolution condition \\
+\midrule
+$\RewardB$ &
+$\widehat{H}_q(y)$ on held-out tasks &
+\LeanName{B_rank_preserved} &
+Gap $>2\epsilon$ \\
+$\RewardC$ via $N_{\mathrm{KL}}$ (Composability Score only) &
+$\widehat{N}(s\mid\mathcal{H})$ on held-out corpus &
+\LeanName{C_rank_preserved} &
+Gap $>2\epsilon$; not part of Benchmark Score \\
+$\RewardDT$ on resampled $q_{\mathrm{probe}}$ &
+$\RewardD$ on frozen $\mathcal{P}$ &
+\LeanName{D_tilde_proxy_rank_agreement} &
+Gap $>2\epsilon$ and $\rho\ge\rho_{\min}$ \\
+None (by design) &
+$G_k$ interaction gain &
+Detection when gap $>2\epsilon$
+(\LeanName{MAS_benchmark_detects_irreducibility},
+\LeanName{kAgent_benchmark_detects}) &
+Pure benchmark --- no training correspondent \\
+\bottomrule
+\end{tabular}
+\caption{One-to-one pairing of training metrics with benchmark metrics, the
+Lean correspondence theorem, and the resolution condition under which the
+correspondence is valid.}
+\end{table}
+
+\begin{remark}[The one asymmetry]
+The $\rho_{\min}$ condition in the $\RewardDT$ row is the \textbf{only
+asymmetry} among the training--benchmark pairs. B has purely algebraic rank
+preservation; D's correspondence additionally requires empirical proxy
+faithfulness. This asymmetry is the formal price of making $\RewardD$
+benchmark-only. The reported Benchmark Score is~\eqref{eq:Rcreativity}, not
+an additive $B$+$D$ sum; training uses
+$\RewardTrain=\RewardB+\tilde\lambda_D\RewardDT$.
+\end{remark}
+
+
+%======================================================================
+\part{The 2-CGRPO Algorithm}
+\label{part:algorithm}
+%======================================================================
+
+\section{Two-Phase Protocol}
+\label{sec:two-phase}
+
+\subsection*{Training phase}
+\begin{itemize}
+  \item Compute $\RewardTrain=\RewardB+\tilde\lambda_D\RewardDT$ per output,
+    with a fresh $q_{\mathrm{probe}}$ sample per batch (no $R_C$ channel).
+  \item Normalize to group-relative advantages via
+    \LeanName{groupDenom_pos}, \LeanName{advantage_sign_correct}, and
+    \LeanName{trainReward_advantage_sign_correct}.
+  \item Update the policy via DPO/GRPO; the directionality certificates are
+    the B and $\tilde D$ theorems of Section~\ref{sec:dpo-directionality}.
+  \item At every checkpoint: compute $\rho(\RewardDT,\RewardD)$ on a small
+    held-aside validation set; if $\rho<\rho_{\min}$, halt and flag a
+    \LeanName{ProxyFaithfulness} violation
+    (\LeanName{ProxyFaithfulness_decay_detectable}).
+\end{itemize}
+
+\subsection*{Evaluation phase}
+\begin{itemize}
+  \item Freeze the policy.
+  \item Compute the Benchmark Score~\eqref{eq:Rcreativity}
+    (\LeanName{Rcreativity}) on held-out tasks with the frozen probe set
+    $\mathcal{P}$ (Section~\ref{sec:benchmark-score}).
+  \item Compute $G_k$ across agent configurations from ContribBench.
+  \item Check all resolution conditions of
+    Section~\ref{sec:correspondence-table} (gap $>2\epsilon$ for each
+    metric).
+  \item Report the \LeanName{ProxyFaithfulness} empirical correlation as a
+    first-class result --- not an appendix detail.
+\end{itemize}
+
+\paragraph{Naming.}
+\textbf{2-CGRPO} denotes: two-phase (train, then certify), Creative
+objective, Group Relative Policy Optimization. The ``2'' also signals the
+two-layer protection: algebraic Lean guarantees at training time, empirical
+proxy validation at benchmark time.
+
+\section{Validation Ledger}
+
+\begin{table}[h]
+\centering
+\scriptsize
+\begin{tabular}{@{}p{0.18\linewidth}p{0.34\linewidth}p{0.40\linewidth}@{}}
+\toprule
+Layer & Lean theorem & Main assumptions \\
+\midrule
+Entropy & \LeanName{shannonEntropy_nonneg} & finite support PMF \\
+Entropy & \LeanName{shannonEntropy_point_mass} & finite support PMF, point mass \\
+Entropy & \LeanName{shannonEntropy_lt_iff} & definitional unfolding \\
+B helper & \LeanName{rewardB_of_feasible} & feasible output \\
+B helper & \LeanName{rewardB_of_infeasible} & infeasible output \\
+B helper & \LeanName{rewardB_nonneg} & entropy nonnegativity and gate cases \\
+B helper & \LeanName{mem_feasibleSet_iff} & finite filtered feasible set \\
+B objective & \LeanName{B1_dominance} & feasible pair, entropy gap \\
+B objective & \LeanName{B2_no_collapse} & finite $Y,Z$, feasible nonempty set, entropy gap \\
+B mixture & \LeanName{B3_mixture_lb} & mass condition $\RewardB(y_{\mathrm{low}})\le\pi(y_{\mathrm{high}})\RewardB(y_{\mathrm{high}})$ \\
+B mixture & \LeanName{entropy_mixture_concavity} & \textbf{theorem} (PROOF-09, promoted): concave Jensen on \texttt{negMulLog} \\
+B mixture & \LeanName{B3b_jensen_anti_collapse} & now axiom-free via \LeanName{entropy_mixture_concavity} \\
+C objective & \LeanName{C1_utility_gate} & $u<\tau$ (Composability Score only) \\
+C objective & \LeanName{C2_copy_penalty} & copy-minimal compressor (Composability Score only) \\
+C objective & \LeanName{C3_no_padding_exploit} & normalized compressor padding bound (Composability Score only) \\
+C objective & \LeanName{C3_no_trivial_padding_gain} & zero-padding cost, normalized compressor (Composability Score only) \\
+N surface & \LeanName{N1_utility_gate} & $u<\tau$ \\
+N surface & \LeanName{N2_kl_nonneg} & Gibbs inequality (finite PMF axiom) \\
+N surface & \LeanName{N3_kl_component_bound} & KL plus entropy bounded by novelty \\
+N surface & \LeanName{klDivergence_nonneg} & finite PMF KL nonnegativity axiom \\
+N surface & \LeanName{kl_cross_entropy_decomposition} & cross-entropy link to C \\
+D probe-relative & \LeanName{D1_utility_gate} & $u<\tau$, fixed finite $\mathcal{P}$ \\
+D probe-relative & \LeanName{D2_dominance} & feasibility, strict deformation gap \\
+D probe-relative & \LeanName{D3_rewardC_bounded} & copy-minimal compressor (Composability Score only) \\
+D probe-relative & \LeanName{D3_exploration_transformation_bound} & \LeanName{ProbeCompressor} (Composability Score only) \\
+D probe-relative & \LeanName{D3_rewardD_bound_standalone} & \LeanName{ProbeCompressor}; Benchmark Score, $R_C$-free \\
+D probe-relative & \LeanName{D4_zero_for_corpus_copy} & append-self invariance \\
+D probe-relative & \LeanName{D4_zero_reward_for_corpus_copy} & feasibility plus D4 \\
+B baseline & \LeanName{BBase_indistinguishable} & feasible pair, equal utility \\
+B baseline & \LeanName{BContrast_distinguishes} & feasible pair, equal utility, entropy gap \\
+C baseline & \LeanName{CBase_infeasible_can_maximize} & $u<\tau$, positive novelty (Composability Score only) \\
+B estimator & \LeanName{B_rank_preserved} & uniform error, true gap $>2\epsilon$ \\
+C estimator & \LeanName{C_rank_preserved} & uniform error, true gap $>2\epsilon$ \\
+DPO bridge & \LeanName{dpo_logit_direction} & distinct winner/loser, $\eta>0$ \\
+DPO bridge & \LeanName{DPO_B_correct_direction} & feasible B pair, entropy gap, $\eta>0$ \\
+DPO bridge & \LeanName{dpo_gradient_increases_logodds} & $\beta>0$, positive sigmoid term, H1, $\eta>0$ \\
+DPO bridge & \LeanName{softmax_monotone_in_logit_diff} & two-logit softmax, $\delta>0$ \\
+DPO bridge & \LeanName{dpo_step_increases_expected_RB} & B-valid pair, positive probability transfer \\
+DPO bridge & \LeanName{DPO_B_gradient_correct} & local DPO transfer hypothesis (H1/H2) \\
+RL signal & \LeanName{benchmarkReward_nonneg} & nonnegative B/D rewards and $\lambda_D$ (diagnostic) \\
+RL signal & \LeanName{trainReward_nonneg} & nonnegative B/$\tilde D$ training signal (no $R_C$) \\
+RL signal & \LeanName{trainReward_neq_benchmarkReward} & train/benchmark split machine-checked \\
+RL signal & \LeanName{groupDenom_pos} & positive advantage stabilizer $\epsilon$ \\
+RL signal & \LeanName{advantage_sign_correct} & rewards below/above group mean \\
+RL signal & \LeanName{B_winner_advantage_pos} & winner above group mean, $\epsilon>0$ \\
+\bottomrule
+\end{tabular}
+\caption{Lean-checked claims and their principal assumptions (objective,
+estimator, and DPO layers).}
+\end{table}
+
+\begin{table}[ht]
+\centering
+\scriptsize
+\begin{tabular}{@{}p{0.18\linewidth}p{0.34\linewidth}p{0.40\linewidth}@{}}
+\toprule
+Layer & Lean theorem & Main assumptions \\
+\midrule
+MAS & \LeanName{MAS_irreducibility} & positive interaction gain \\
+MAS benchmark & \LeanName{MAS_benchmark_detects_irreducibility} & interaction gain $>2\epsilon$ \\
+MAS $k$-agent & \LeanName{kAgent_irreducibility} & positive $k$-agent interaction gain \\
+MAS $k$-agent & \LeanName{kAgent_benchmark_detects} & $k$-agent gain $>2\epsilon$ \\
+MAS graph & \LeanName{CommGraph} & irreflexive directed communication graph \\
+MAS graph & \LeanName{nonProduct_base_case} & faithfulness plus edge $0\to1$ \\
+MAS graph & \LeanName{connectedMAS_nonProductKernel} & faithfulness plus at least one edge \\
+MAS graph & \LeanName{gain_zero_iff_joint_eq_max} & \textbf{theorem} (PROOF-11, corrected): zero gain iff $H_J=\max_i H_i$; old axiom removed \\
+MAS graph & \LeanName{productKernel_additivity_gain_pos} & additive joint entropy, positive marginals $\Rightarrow$ positive gain \\
+MAS graph & \LeanName{gain_biconditional} & nonnegative gain plus corrected degeneracy characterization \\
+O-info & \LeanName{oInformation3_negative_of_pair_sum_lt} & pair-sum below triple term \\
+O-info & \LeanName{oInformation3_positive_of_triple_lt_pair_sum} & triple term below pair-sum \\
+O-info & \LeanName{equalMarginals_gain_implies_synergy} & equal-marginal sign condition \\
+O-info & \LeanName{negativeGain_implies_redundancy} & collapse sign condition \\
+O-info bridge & \LeanName{productKernel_joint_entropy_eq_sum} & \textbf{theorem} (PROOF-10, promoted): via \LeanName{shannonEntropy_jointPMF} \\
+O-info bridge & \LeanName{productKernel_implies_redundancy} & strictly positive marginal entropies \\
+Composability & \LeanName{Bmax_not_jointly_dominated} & B maximizer \\
+Composability & \LeanName{paretoFrontier_nonempty} & finite nonempty output type \\
+Composability & \LeanName{BC_tension_example} & explicit $\operatorname{Fin}(2)$ construction \\
+Composability & \LeanName{BCD_tension_example} & explicit $\operatorname{Fin}(3)$ construction \\
+Composability & \LeanName{BCD_paretoFrontier_nonempty} & finite nonempty output type \\
+Composability & \LeanName{paretoFrontier_nonempty_BD} & finite nonempty output type; Benchmark Score, $R_C$-free \\
+Estimator calibration & \LeanName{plugIn_bias_axiom} & \textbf{registered import} (PROOF-12, KG-2): Miller--Madow-scale bound \\
+Estimator calibration & \LeanName{entropy_ranking_sample_requirement} & true gap $>|Y|/n$ \\
+Benchmark spec & \LeanName{benchmark_can_detect_S2_dominance} & true S2--S1 gap $>4\epsilon$ \\
+\bottomrule
+\end{tabular}
+\caption{Lean-checked claims and their principal assumptions (multi-agent,
+composability, and benchmark layers).}
+\end{table}
+
+\begin{table}[ht]
+\centering
+\scriptsize
+\begin{tabular}{@{}p{0.18\linewidth}p{0.34\linewidth}p{0.40\linewidth}@{}}
+\toprule
+Layer & Lean theorem & Main assumptions \\
+\midrule
+D proxy & \LeanName{D_tilde_utility_gate} & $u<\tau$ \\
+D proxy & \LeanName{D_tilde_nonneg} & gated KL nonnegativity \\
+D proxy & \LeanName{D_tilde_zero_for_identical} & policy matches frozen reference on probe \\
+D proxy & \LeanName{D_tilde_no_fixed_target} & \textbf{protocol axiom}: probe batch resampled, no fixed probe string \\
+D proxy & \LeanName{D_tilde_dominance} & feasibility, strict proxy-reward gap \\
+DPO bridge & \LeanName{DPO_C_gradient_correct} & C-valid pair, local DPO transfer (H1/H2) \\
+DPO bridge & \LeanName{DPO_D_tilde_gradient_correct} & $\tilde D$-valid pair, local DPO transfer (H1/H2) \\
+Proxy bridge & \LeanName{D_tilde_proxy_rank_agreement} & proxy faithfulness, proxy gap $>2\epsilon$ \\
+Proxy bridge & \LeanName{ProxyFaithfulness_decay_detectable} & monitor calibration link, $\rho<\rho_{\min}$ \\
+RL signal & \LeanName{trainReward_nonneg} & nonnegative B/C components and weights \\
+RL signal & \LeanName{trainReward_advantage_sign_correct} & train rewards below/above group mean \\
+RL signal & \LeanName{trainReward_neq_fullReward} & weighted D components differ \\
+Goodhart & \LeanName{B_utility_gate_tightness} & \textbf{calibration axiom}: $\tau>H_q(y_{\mathrm{random}})$ \\
+Goodhart & \LeanName{C_corpus_stationarity_condition} & \textbf{protocol axiom}: external corpus schedule only \\
+Goodhart & \LeanName{Goodhart_resistance_summary} & all four protocol certificates \\
+\bottomrule
+\end{tabular}
+\caption{Lean-checked claims and their principal assumptions (training-signal,
+proxy, and Goodhart layers).}
+\end{table}
+
+\subsection*{CUE-Layer and Structural Additions}
+
+\begin{table}[h]
+\centering
+\scriptsize
+\begin{tabular}{@{}p{0.14\linewidth}p{0.36\linewidth}p{0.28\linewidth}p{0.14\linewidth}@{}}
+\toprule
+Layer & Lean theorem & Main assumptions & Status \\
+\midrule
+Foundation & \LeanName{maxEntropy_finite_alphabet} & Gibbs inequality (\LeanName{klDivergence_nonneg}) & Machine-checked \\
+Foundation & \LeanName{klDivergence_uniform_eq} & finite nonempty alphabet & Machine-checked \\
+Foundation & \LeanName{sum_toReal_eq_one} & finite PMF & Machine-checked \\
+Foundation & \LeanName{shannonEntropy_eq_sum_negMulLog} & definitional & Machine-checked \\
+CUE & \LeanName{cue}, \LeanName{cue_nonneg} & nonnegative Brier delta, positive bit length & Machine-checked \\
+CUE & \LeanName{CUE_voi_equivalence} (PROOF-01) & proper-scoring-rule bound field & Machine-checked \\
+CUE & \LeanName{CUE_voi_equality} (PROOF-01) & calibrated binary saturation & Machine-checked \\
+CUE & \LeanName{shannon_upper_bound_normalization} (PROOF-02) & VOI $\le$ posterior entropy field & Machine-checked \\
+CUE & \LeanName{CUE_primary_gate} & gate definition (Composability Score only; superseded by shifted form) & Machine-checked \\
+CUE & \LeanName{receiver_expansion_clarification_separation} (PROOF-06) & explicit $\operatorname{Fin}(2)$ construction & Machine-checked \\
+CUE shifted & \LeanName{CUE_shifted_bound} & Shannon ceiling minus $f$; Benchmark Score, $R_C$-free & Machine-checked \\
+CUE shifted & \LeanName{CUE_shifted_sign_iff} & threshold clearance; Benchmark Score, $R_C$-free & Machine-checked \\
+CUE shifted & \LeanName{receiver_expansion_bounded} & normalized entropy ratio; Benchmark Score, $R_C$-free & Machine-checked \\
+CUE shifted & \LeanName{Rcreativity_sign_matches_CUE_shifted} & $\alpha>0$, $r_b\in[0,1]$; Benchmark Score, $R_C$-free & Machine-checked \\
+CUE shifted & \LeanName{Gk_gated_by_CUE_shifted} & bridge implication, $f<\mathrm{CUE}$; Benchmark Score, $R_C$-free & Machine-checked \\
+Trajectory & \LeanName{CUE_trajectory_monotone_nondecreasing} (PROOF-04) & per-step gate $r_t\ge0$ & Machine-checked \\
+Trajectory & \LeanName{DC_score_existence} (PROOF-05) & explicit tent construction & Machine-checked \\
+Trajectory & \LeanName{monotone_increasing_not_DC} (PROOF-05) & strictly increasing trajectory & Machine-checked \\
+Trajectory & \LeanName{step_CUE_gamma_positivity_characterization} (PROOF-14) & fitted exponential-plus-linear curve & Machine-checked \\
+Trajectory & \LeanName{dense_reward_DC_bonus_incentivizes_exploration} (PROOF-15) & equal cumulative CUE, positive bonus & Machine-checked \\
+\bottomrule
+\end{tabular}
+\caption{CUE-layer additions (foundation, gate, and trajectory diagnostics)
+with verification status. ``Machine-checked'' means proved in Lean with no
+\texttt{sorry}.}
+\end{table}
+
+\begin{table}[ht]
+\centering
+\scriptsize
+\begin{tabular}{@{}p{0.14\linewidth}p{0.36\linewidth}p{0.28\linewidth}p{0.14\linewidth}@{}}
+\toprule
+Layer & Lean theorem & Main assumptions & Status \\
+\midrule
+MAS bridge & \LeanName{Gk_implies_CUE_improvement} (PROOF-07) & calibration link, gain $>2\varepsilon_{\mathrm{cal}}$ & Machine-checked \\
+MAS bridge & \LeanName{Gk_implies_CUE_improvement_sup} (PROOF-07) & calibration link, gain $>2\varepsilon_{\mathrm{cal}}$ & Machine-checked \\
+DPS & \LeanName{dual_process_separation_principle} (PROOF-03) & live-only reward construction & Machine-checked \\
+DPS & \LeanName{Rtrain_cannot_goodhart_frozen} (PROOF-03) & live-only reward construction & Machine-checked \\
+Goodhart & \LeanName{rank_reversal_refutes_agreement} (PROOF-13) & rank-reversal witness & Machine-checked \\
+Goodhart & \LeanName{reversal_instance_exists} (PROOF-13) & explicit two-candidate construction & Machine-checked \\
+Goodhart & \LeanName{structural_goodhart_collapse} (PROOF-13) & composition of the above & Machine-checked \\
+Commensurability & \LeanName{rewardB_le_maxEntropy} (PROOF-08) & max-entropy bound & Machine-checked \\
+Commensurability & \LeanName{lambda_normalization_equalizes_maxima} (PROOF-08) & positive length and $\log|\Sigma|$ (Composability Score only) & Machine-checked \\
+Commensurability & \LeanName{lambda_D_normalization_standalone} & probe size/length only; Benchmark Score, $R_C$-free & Machine-checked \\
+2-GRPO & \LeanName{groupScale_eq} (PROOF-16) & two-rollout group & Machine-checked \\
+2-GRPO & \LeanName{advantage_antisymm} (PROOF-16) & two-rollout group & Machine-checked \\
+2-GRPO & \LeanName{twoGRPO_advantage_quantization_unbiased} (PROOF-16) & $r_2<r_1$ & Machine-checked \\
+MAS promoted & \LeanName{jointPMF_apply} (PROOF-10) & finite alphabet & Machine-checked \\
+MAS promoted & \LeanName{shannonEntropy_jointPMF} (PROOF-10) & finite alphabet & Machine-checked \\
+Known gap & \LeanName{klDivergence_nonneg} (KG-1) & Gibbs inequality & Registered import \\
+Known gap & \LeanName{kl_cross_entropy_decomposition} (KG-1) & cross-entropy link & Registered import \\
+Known gap & \LeanName{plugIn_bias_axiom} (KG-2) & Miller--Madow bound & Registered import \\
+\bottomrule
+\end{tabular}
+\caption{Structural additions (dual-process separation, Goodhart collapse,
+commensurability, 2-GRPO, MAS promotions) with verification status.
+``Registered import'' means an explicitly documented trusted axiom listed in
+the Known Gaps Registry (Appendix~\ref{app:known-gaps}).}
+\end{table}
+
+\appendix
+
+\section{Benchmark Hold-Out Probe Protocol}
+\label{app:probe-protocol}
+
+Component D is undefined until the probe set $\mathcal{P}$ is fixed. The
+Component D section defines the hold-out protocol; experiments report the
+concrete instantiation here: sampling seed, split index, $|\mathcal{P}|$, and
+per-stratum counts. Under this protocol, $\mathcal{P}$ is reproducible and
+domain-representative by construction. Lean proves properties of
+$D(s,\mathcal{H},\mathcal{P})$ for any fixed finite $\mathcal{P}$; the benchmark
+protocol fixes which finite $\mathcal{P}$ is used.
+
+\section{Computational Approximation: Surface KL Novelty}
+\label{app:n-surface}
+
+The file \texttt{Creativity/C/SurfaceNovelty.lean} defines surface
+distributional novelty on finite PMFs. For output distribution $p_s$ and corpus
+distribution $p_{\mathcal{H}}$,
+\[
+  N_{\mathrm{KL}}(s\mid\mathcal{H})
+  :=
+  D_{\mathrm{KL}}(p_s\|p_{\mathcal{H}}),
+\]
+formalized as \LeanName{surfaceNoveltyKL}. This is an empirical approximation
+to C, not an independent creativity dimension.
+
+\begin{theorem}[N1: utility gate]
+\LeanName{N1_utility_gate}. If $u<\tau$, then $\RewardN(q,s)=0$.
+\end{theorem}
+\begin{proof}
+Identical in structure to C1: infeasibility forces the zero branch of the gated
+reward definition. Lean simplifies \texttt{rewardN} with \texttt{not\_le.mpr}.
+\end{proof}
+
+\begin{theorem}[N2: KL nonnegativity]
+\LeanName{N2_kl_nonneg}. For all finite-alphabet PMFs $p_s,p_{\mathcal{H}}$,
+\[
+  0\le D_{\mathrm{KL}}(p_s\|p_{\mathcal{H}}).
+\]
+\end{theorem}
+\begin{proof}
+This is Gibbs' inequality for finite distributions. Lean invokes the axiom
+\LeanName{klDivergence_nonneg} from
+\texttt{Creativity/Probability/KLDivergence.lean}.
+\end{proof}
+
+\begin{theorem}[N3: KL as a component of algorithmic novelty]
+\LeanName{N3_kl_component_bound}. If
+\[
+  D_{\mathrm{KL}}(p_s\|p_{\mathcal{H}})+\Ent(p_s)\le N(s\mid\mathcal{H}),
+\]
+then
+\[
+  D_{\mathrm{KL}}(p_s\|p_{\mathcal{H}})\le N(s\mid\mathcal{H}).
+\]
+\end{theorem}
+\begin{proof}
+Both $D_{\mathrm{KL}}$ and $\Ent(p_s)$ are nonnegative by N2 and
+\LeanName{shannonEntropy_nonneg}. Subtracting the entropy term from the assumed
+bound yields the claim. Lean closes with \texttt{linarith}. The cross-entropy
+decomposition \LeanName{kl_cross_entropy_decomposition} axiomatizes the precise
+link $N_{\mathrm{KL}}+\Ent(p_s)\approx N(s\mid\mathcal{H})$ when strings are
+mapped to PMFs.
+\end{proof}
+
+\section{Composability Scaffolding}
+\label{app:composability-scaffolding}
+
+The main text uses the Pareto-frontier theorem. The following finite
+constructions are Lean sanity checks showing that the objectives can prefer
+different outputs.
+
+\begin{theorem}[B-maximizer is not jointly dominated]
+\LeanName{Bmax_not_jointly_dominated}. If $y_{\max}$ satisfies
+\[
+  B(y)\le B(y_{\max})\qquad\text{for all }y,
+\]
+then there is no $y'$ such that
+\[
+  B(y_{\max})<B(y')
+  \quad\text{and}\quad
+  C(y_{\max})\le C(y').
+\]
+\end{theorem}
+\begin{proof}
+Any joint dominator would have to be strictly better in B:
+$B(y_{\max})<B(y')$. But the maximality assumption gives
+$B(y')\le B(y_{\max})$, contradicting strict inequality. Lean uses
+\texttt{not\_lt.mpr}.
+\end{proof}
+
+\begin{theorem}[B--C tension example]
+\LeanName{BC_tension_example}. There exist rewards $B,C:\operatorname{Fin}(2)\to
+\R$ such that output $0$ maximizes B, output $1$ maximizes C, and the preferences
+are genuinely opposed:
+\[
+  B(1)<B(0),\qquad C(0)<C(1).
+\]
+\end{theorem}
+\begin{proof}
+Take $B(0)=1$, $B(1)=0$, $C(0)=0$, and $C(1)=1$. Then $0$ is the B-maximizer,
+$1$ is the C-maximizer, and the two strict inequalities hold immediately. Lean
+proves the finite cases by case analysis on \(\operatorname{Fin}(2)\) and
+numeric simplification.
+\end{proof}
+
+\begin{theorem}[B--C--D tension example]
+\LeanName{BCD_tension_example}. There exist rewards
+$B,C,D:\operatorname{Fin}(3)\to\R$ such that output $0$ maximizes B, output $1$
+maximizes C, output $2$ maximizes D, and the three preferences are genuinely
+opposed across dimensions.
+\end{theorem}
+\begin{proof}
+Lean constructs explicit rewards on $\operatorname{Fin}(3)$ and verifies by
+finite case analysis that each component is maximized at a different index while
+the opposing strict inequalities hold.
+\end{proof}
+
+\begin{theorem}[Nonempty three-dimensional Pareto frontier]
+\LeanName{BCD_paretoFrontier_nonempty}. For any finite nonempty output type $Y$
+and rewards $B,C,D:Y\to\R$, there exists $y:Y$ not jointly dominated in all
+three components.
+\end{theorem}
+\begin{proof}
+Same finite-maximizer argument as the two-component case, applied to the B
+coordinate while ignoring the C and D inequalities in the domination witness.
+Lean uses \texttt{Finset.exists\_mem\_eq\_sup'} and \texttt{not\_lt.mpr}.
+\end{proof}
+
+\section{Lean Appendix: B3 Scaffolding}
+\label{app:b3-scaffolding}
+
+The main text presents \LeanName{B3_mixture_lb} as the general mixture
+anti-collapse result. Lean proves it by reduction to the algebraic lemmas below.
+These are scaffolding, not independent contributions.
+
+\begin{theorem}[Entropy concavity on downstream mixtures (promoted, PROOF-09)]
+\LeanName{entropy_mixture_concavity}. For finite $Y,Z$, model $m$, prompt
+$q$, and mixture $\pi:\PMF(Y)$, let $\mu_q(\pi)$ denote the downstream mixture
+kernel obtained by sampling $y\sim\pi$ and then $z\sim T(\cdot\mid q,y)$. Then
+\[
+  \sum_y \pi(y)H_q(y)
+  \le
+  \Ent(\mu_q(\pi)).
+\]
+This is Shannon concavity for finite mixtures. Formerly the axiom
+\LeanName{entropy_mixture_concavity_axiom}; now a derived theorem via concave
+Jensen on \texttt{Real.negMulLog} (see the proof in the B mixture section).
+\end{theorem}
+
+\begin{theorem}[B3 scaffolding: weighted mixture lower bound]
+\LeanName{B3_weighted_high_lb}. Assume $Y$ and $Z$ are finite. Let
+$\pi : \PMF(Y)$ and $y_{\mathrm{low}},y_{\mathrm{high}}:Y$. If
+\[
+  \RewardB(q,y_{\mathrm{low}})
+    \le \pi(y_{\mathrm{high}})\RewardB(q,y_{\mathrm{high}}),
+\]
+then
+\[
+  \RewardB(q,y_{\mathrm{low}})
+    \le \sum_{y:Y} \pi(y)\RewardB(q,y).
+\]
+\end{theorem}
+\begin{proof}
+Every summand in the expectation is nonnegative, so the full finite sum is at
+least $\pi(y_{\mathrm{high}})\RewardB(q,y_{\mathrm{high}})$. Composing with the
+hypothesis gives the claim. Lean uses \texttt{Finset.sum\_nonneg}.
+\end{proof}
+
+\begin{theorem}[B3 scaffolding: strict expected dominance]
+\LeanName{B3_expected_exceeds_dominated}. Assume $Y$ and $Z$ are finite. If
+$y_{\mathrm{low}}$ and $y_{\mathrm{high}}$ are feasible,
+$H_q(y_{\mathrm{low}}) < H_q(y_{\mathrm{high}})$, $\pi(y_{\mathrm{high}})>0$,
+and
+\[
+  \RewardB(q,y_{\mathrm{low}})
+    < \pi(y_{\mathrm{high}})\RewardB(q,y_{\mathrm{high}}),
+\]
+then
+\[
+  \RewardB(q,y_{\mathrm{low}})
+    < \sum_{y:Y}\pi(y)\RewardB(q,y).
+\]
+\end{theorem}
+\begin{proof}
+As above, $\pi(y_{\mathrm{high}})\RewardB(q,y_{\mathrm{high}})\le\sum_y\pi(y)\RewardB(q,y)$.
+Transitivity with the strict hypothesis gives the result. Lean uses
+\texttt{lt\_of\_lt\_of\_le}.
+\end{proof}
+
+\section{Experimental Falsifiability Map}
+\label{app:falsifiability}
+
+Each experimental prediction E1--E5 of the proposal corresponds to a formal
+statement derivable from the Lean theorems. A failed experiment therefore
+falsifies an identified assumption, not the framework diffusely.
+
+\begin{center}
+\begin{tabular}{@{}p{0.30\linewidth}p{0.62\linewidth}@{}}
+\toprule
+Experiment & Formal correspondent \\
+\midrule
+E1 (Judge calibration) & \LeanName{B_rank_preserved}, \LeanName{C_rank_preserved}: rankings are estimator-noise-proof exactly when the measured gap exceeds $2\epsilon$; judge miscalibration manifests as $\epsilon$ inflation. \\
+E2 (Calibration failure replication) & \LeanName{BContrast_distinguishes}: CUE-gated B maintains rank where utility-only reward models are provably indistinguishable. \\
+E3 (Repetition vs.\ score) & \LeanName{receiver_expansion_clarification_separation} (PROOF-06): the $R_B^{\to A}$ label is anti-correlated with surface similarity by construction, since equal-CUE outputs carry opposite expansion labels. \\
+E4 (Discriminant validity) & \LeanName{BCD_tension_example}, \LeanName{BCD_paretoFrontier_nonempty}: the Pareto frontier is non-empty with distinct maximizers, so the dimensions are provably non-redundant. \\
+E5 (Receiver stability) & \LeanName{DC_score_existence} (PROOF-05) $+$ \LeanName{D_tilde_proxy_rank_agreement}: trajectory shape and proxy rank agreement are stable under the resolution conditions. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{2-GRPO Training Protocol Specification}
+\label{app:2grpo-protocol}
+
+This appendix makes the Lean-certified guarantees operationally executable for
+the planned training run. The formal object instantiated is
+\LeanName{DTildeTrainingProtocol} together with the calibration structures of
+Parts~\ref{part:dps} and~\ref{part:training}.
+
+\begin{enumerate}
+  \item \textbf{$\rho_{\min}$ calibration.} Before training begins, run the
+  benchmark correlation study: sample checkpoint-free model outputs, compute
+  $(\RewardDT, R_D)$ pairs on a held-aside validation set, and set
+  $\rho_{\min}$ from the empirical correlation distribution (e.g.\ its lower
+  confidence bound). This discharges the precondition of
+  \LeanName{ProxyFaithfulness_decay_detectable}.
+  \item \textbf{$\tau$ calibration.} Generate incoherent high-entropy
+  baselines (feasibility-passing shuffled/noise outputs), estimate
+  $H_q(y_{\mathrm{random}})$, and set $\tau$ strictly above it. This
+  discharges \LeanName{B_utility_gate_tightness} and blocks exploitation path
+  (iii) of the Structural Goodhart Theorem.
+  \item \textbf{Corpus stationarity schedule.} Fix the external corpus update
+  schedule before training; policy outputs are never inserted into
+  $\mathcal{H}$. This discharges \LeanName{C_corpus_stationarity_condition}.
+  \item \textbf{Probe resampling.} Resample $Q_{\mathrm{probe}}$ fresh every
+  batch; no probe string persists across steps
+  (\LeanName{D_tilde_no_fixed_target}).
+  \item \textbf{Rollout and advantage computation.} Two rollouts per prompt;
+  advantages quantize to $\pm 1/\sqrt{2}$
+  (\LeanName{twoGRPO_advantage_quantization_unbiased}), so the update is a
+  signed-rank (DPO-equivalent) step at roughly $1/8$ of the 16-rollout cost.
+  \item \textbf{Checkpoint monitoring.} At every checkpoint compute
+  $\rho(\RewardDT, R_D)$ on the held-aside validation set; if
+  $\rho < \rho_{\min}$, halt and flag a \LeanName{ProxyFaithfulness}
+  violation. Report the final correlation as a first-class result.
+\end{enumerate}
+
+\section{Known Gaps Registry}
+\label{app:known-gaps}
+
+Central, auditable list of every statement the Lean development assumes rather
+than proves, with its promotion path. All other results cited in this document
+are machine-checked theorems with no \texttt{sorry}.
+
+\begin{enumerate}
+  \item \textbf{KG-1 (analytic imports).} \LeanName{klDivergence_nonneg}
+  (Gibbs inequality) and \LeanName{kl_cross_entropy_decomposition}
+  (cross-entropy link) in \texttt{Creativity/Probability/KLDivergence.lean}.
+  Promotion path: derive from Jensen on the convex function $x\mapsto x\log x$
+  over the support, mirroring the promotion of
+  \LeanName{entropy_mixture_concavity} (PROOF-09). Note that
+  \LeanName{maxEntropy_finite_alphabet} is already \emph{derived from} KG-1
+  rather than assumed separately.
+  \item \textbf{KG-2 (statistical import).} \LeanName{plugIn_bias_axiom}
+  (Miller--Madow bias bound, PROOF-12). Promotion path: Hoeffding's
+  inequality plus Lipschitz continuity of $-x\log x$; blocked on a Lean~4
+  concentration-of-measure dependency.
+  \item \textbf{KG-3 (protocol certificates).}
+  \LeanName{D_tilde_no_fixed_target} (probe resampling) and
+  \LeanName{B_utility_gate_tightness} ($\tau$ calibration) are certificates
+  carried by protocol structures: they are discharged by \emph{running the
+  protocol correctly} (Appendix~\ref{app:2grpo-protocol}), not by
+  mathematics. Their violation consequences are machine-checked by the
+  Structural Goodhart Theorem (PROOF-13).
+  \item \textbf{KG-4 (resolved).} Formerly registered gaps now closed:
+  \LeanName{entropy_mixture_concavity_axiom} (promoted, PROOF-09),
+  \LeanName{productKernel_joint_entropy_eq_sum} (promoted, PROOF-10), and
+  \LeanName{gain_zero_iff_productKernel} (removed as incorrect and replaced
+  by \LeanName{gain_zero_iff_joint_eq_max} plus
+  \LeanName{productKernel_additivity_gain_pos}, PROOF-11).
+  \item \textbf{KG-5 (optional shifted threshold).} $f$ for the calibration
+  variant \LeanName{CUE_shifted} / \LeanName{Rcreativity_shifted} --- not
+  part of the canonical definition~\eqref{eq:Rcreativity}. Empirically
+  calibrated per domain; all shifted theorems hold for every real $f$.
+  \item \textbf{KG-6 (Benchmark Score hyperparameters).}
+  $\alpha$ (expansion-bonus weight; also absorbs bits/nats residual scale),
+  $\delta_D$ (D-gate threshold), and $\lambda_G$ (interaction-gain weight)
+  are empirically calibrated with no canonical closed form. Status:
+  registered assumptions, not proved.
+\end{enumerate}
+
+\end{document}

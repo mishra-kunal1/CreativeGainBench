@@ -1,59 +1,171 @@
-import os
-import json
+"""
+Generate model responses for CreativeGainBench prompts.
+
+Supports OpenAI and Ollama (OpenAI-compatible local API).
+"""
+
+from __future__ import annotations
+
 import argparse
+import json
+import os
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
-from concurrent.futures import ThreadPoolExecutor
+
 from dotenv import load_dotenv
 from openai import OpenAI
 
 load_dotenv()
 
-client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
-MODEL = "gpt-4o-mini"
+DEFAULT_OLLAMA_BASE = "http://127.0.0.1:11434/v1"
 TOP_P = 0.9
 TEMPERATURE = 1.0
 
 
-def _call_api(prompt: str, n: int) -> dict:
-    completion = client.chat.completions.create(
-        model=MODEL,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=TEMPERATURE,
-        top_p=TOP_P,
-        n=n,
-    )
-    responses = [{f"response-{i}": choice.message.content} for i, choice in enumerate(completion.choices)]
-    return {"prompt": prompt, "responses": responses}
+def _make_client(provider: str, base_url: str | None) -> OpenAI:
+    provider = provider.lower()
+    if provider == "ollama":
+        return OpenAI(
+            base_url=base_url or DEFAULT_OLLAMA_BASE,
+            api_key=os.environ.get("OLLAMA_API_KEY", "ollama"),
+        )
+    if provider == "openai":
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if not api_key:
+            raise RuntimeError("OPENAI_API_KEY required for provider=openai")
+        return OpenAI(api_key=api_key, base_url=base_url)
+    raise ValueError(f"Unknown provider: {provider!r} (use openai|ollama)")
 
 
-def run_inference(prompts: list[str], n: int = 5, workers: int = 64) -> list[dict]:
-    workers = min(workers, len(prompts))
+def _call_api(
+    client: OpenAI,
+    model: str,
+    prompt: str,
+    n: int,
+    *,
+    provider: str,
+    domain: str | None = None,
+) -> dict:
+    """
+    Generate n completions. Ollama's OpenAI-compatible API typically ignores
+    `n`, so we issue n sequential/parallel single-completion calls there.
+    """
+    responses: list[dict] = []
+    if provider == "ollama" and n > 1:
+        for i in range(n):
+            completion = client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=TEMPERATURE,
+                top_p=TOP_P,
+                n=1,
+            )
+            text = completion.choices[0].message.content or ""
+            responses.append({f"response-{i}": text})
+    else:
+        completion = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=TEMPERATURE,
+            top_p=TOP_P,
+            n=n,
+        )
+        responses = [
+            {f"response-{i}": (choice.message.content or "")}
+            for i, choice in enumerate(completion.choices)
+        ]
+    row: dict = {"prompt": prompt, "responses": responses}
+    if domain is not None:
+        row["domain"] = domain
+    return row
+
+
+def run_inference(
+    records: list[dict[str, str]],
+    *,
+    client: OpenAI,
+    model: str,
+    provider: str,
+    n: int = 5,
+    workers: int = 64,
+) -> list[dict]:
+    workers = max(1, min(workers, len(records)))
+
+    def _one(record: dict[str, str]) -> dict:
+        return _call_api(
+            client,
+            model,
+            record["prompt"],
+            n,
+            provider=provider,
+            domain=record.get("domain"),
+        )
+
     with ThreadPoolExecutor(max_workers=workers) as executor:
-        results = list(executor.map(lambda p: _call_api(p, n), prompts))
+        results = list(executor.map(_one, records))
     return results
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data", type=Path, required=True, help="Path to .jsonl file with 'prompt' field")
-    parser.add_argument("--output-dir", type=Path, default=Path("data/results"), help="Base output directory")
-    parser.add_argument("--limit", type=int, default=None, help="Number of samples to run")
-    parser.add_argument("--n", type=int, default=5, help="Number of responses per prompt")
-    parser.add_argument("--workers", type=int, default=None, help="Max concurrent requests (default: min(limit, 64))")
+    parser.add_argument("--data", type=Path, required=True, help="JSONL with 'prompt' field")
+    parser.add_argument("--output-dir", type=Path, default=Path("data/results"))
+    parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--n", type=int, default=5, help="Completions per prompt")
+    parser.add_argument("--workers", type=int, default=None)
+    parser.add_argument(
+        "--provider",
+        choices=["openai", "ollama"],
+        default="ollama",
+        help="Model provider (default: ollama)",
+    )
+    parser.add_argument(
+        "--model",
+        type=str,
+        default=None,
+        help="Model name (default: gemma2:2b for ollama, gpt-4o-mini for openai)",
+    )
+    parser.add_argument(
+        "--base-url",
+        type=str,
+        default=None,
+        help="Override API base URL (ollama default http://127.0.0.1:11434/v1)",
+    )
     args = parser.parse_args()
 
+    model = args.model or (
+        "gemma2:2b" if args.provider == "ollama" else "gpt-4o-mini"
+    )
+    client = _make_client(args.provider, args.base_url)
+
     with open(args.data) as f:
-        prompts = [json.loads(line)["prompt"] for line in f]
+        records = [json.loads(line) for line in f if line.strip()]
 
     if args.limit:
-        prompts = prompts[:args.limit]
+        records = records[: args.limit]
 
-    workers = args.workers or min(len(prompts), 64)
-    results = run_inference(prompts, n=args.n, workers=workers)
+    workers = args.workers
+    if workers is None:
+        # Keep ollama concurrency modest to avoid GPU thrash.
+        workers = min(len(records), 2 if args.provider == "ollama" else 64)
 
+    print(
+        f"Running {len(records)} prompts on {args.provider}/{model} "
+        f"(n={args.n}, workers={workers})"
+    )
+    results = run_inference(
+        records,
+        client=client,
+        model=model,
+        provider=args.provider,
+        n=args.n,
+        workers=workers,
+    )
+
+    safe_model = model.replace("/", "_").replace(":", "_")
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    out_dir = args.output_dir / MODEL / timestamp
+    out_dir = args.output_dir / safe_model / timestamp
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"{args.data.stem}.jsonl"
     with open(out_path, "w") as f:

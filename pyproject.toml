@@ -7,11 +7,24 @@ dependencies = [
     "datasets",
     "openai",
     "python-dotenv",
+    "torch",
+    "sentence-transformers",
+    "kenlm",
+    "tomli; python_version < '3.11'",
 ]
+
+[project.optional-dependencies]
+dev = ["pytest"]
 
 [project.scripts]
 download-datasets = "creativegainbench.utils.download_dataset:main"
 create-subset = "creativegainbench.utils.create_subset:main"
+build-eval-prompts = "creativegainbench.utils.build_eval_prompts:main"
+prepare-artifacts = "creativegainbench.artifacts.prepare:main"
+calibrate-delta-d = "creativegainbench.artifacts.calibrate_delta_d:main"
+run-benchmark = "creativegainbench.eval.benchmark_eval:main"
+run-mas = "creativegainbench.eval.mas_infer:main"
+benchmark-report = "creativegainbench.eval.report:main"
 
 [build-system]
 requires = ["setuptools"]
@@ -19,3 +32,19 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+creativegainbench = [
+    "config/*.toml",
+    "artifacts/*.json",
+    "artifacts/probes/*.json",
+    "artifacts/codebook/*.pt",
+    "artifacts/models/*.pt",
+    "artifacts/models/*.arpa",
+    "artifacts/models/*.klm",
+    "artifacts/manifest.json",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
