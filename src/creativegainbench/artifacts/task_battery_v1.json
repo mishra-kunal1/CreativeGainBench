@@ -1,0 +1,46 @@
+{
+  "version": "v1",
+  "seed": 42,
+  "tasks": [
+    {
+      "id": "tb-001",
+      "domain": "creative_writing",
+      "input": "Continue this premise in two sentences: a city where clocks run backward on rainy days."
+    },
+    {
+      "id": "tb-002",
+      "domain": "scientific_proposal",
+      "input": "List three measurable outcomes for a rooftop-garden pollinator study."
+    },
+    {
+      "id": "tb-003",
+      "domain": "mathematical_proof",
+      "input": "State the next lemma you would prove after showing there are infinitely many primes."
+    },
+    {
+      "id": "tb-004",
+      "domain": "creative_writing",
+      "input": "Invent one new rule for a world where shadows keep secrets."
+    },
+    {
+      "id": "tb-005",
+      "domain": "scientific_proposal",
+      "input": "Name two confounders in a trial of intermittent fasting for insulin sensitivity."
+    },
+    {
+      "id": "tb-006",
+      "domain": "mathematical_proof",
+      "input": "Give a one-sentence sketch of why sqrt(2) cannot be a ratio of integers."
+    },
+    {
+      "id": "tb-007",
+      "domain": "creative_writing",
+      "input": "Describe a market that sells unused minutes without using the word time."
+    },
+    {
+      "id": "tb-008",
+      "domain": "scientific_proposal",
+      "input": "Propose a cheap sensor placement strategy for urban heat islands."
+    }
+  ]
+}

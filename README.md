@@ -2,81 +2,106 @@
 
 Benchmark for evaluating creativity gain in agent-generated outputs across scientific proposal writing, creative writing, and mathematical proof writing.
 
+Reported score (see `math_backing/Creativity/CUE/BenchmarkScore.lean`):
+
+\[
+R_{\mathrm{creativity}}
+=
+1[\mathrm{CUE}>0]
+\cdot
+1[R_D>\delta_D]
+\cdot
+\bigl(\mathrm{CUE}\cdot(1+\alpha R_B^{\to A})+\lambda_G G_k\bigr)
+\]
+
+`R_D` uses idea-level symbols (MiniLM → frozen codebook) compressed with **KenLM**.
+
 ## Setup
 
 ```bash
-pip install -e .
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
 ```
 
-Create a `.env` file with your tokens:
-
-```
-HF_TOKEN=hf_your_token_here
-OPENAI_API_KEY=sk-your_key_here
-OPENROUTER_API_KEY=sk-or-your_key_here
-OLLAMA_API_KEY=your_ollama_cloud_key_here
-```
-
-| Variable | Used for |
-|----------|----------|
-| `HF_TOKEN` | Downloading Hugging Face datasets |
-| `OPENAI_API_KEY` | Current OpenAI inference (`model.py`) |
-| `OPENROUTER_API_KEY` | LLM-as-judge + live $/token prices for cost estimates |
-| `OLLAMA_API_KEY` | Ollama Cloud open models (no local downloads); create at [ollama.com/settings/keys](https://ollama.com/settings/keys) |
-
-## 1. Downloading the datasets
+Frozen artifacts (idea codebook, KenLM model, boundary detector, manifest, δ_D)
+are **not committed**. Generate them once after install — deterministic under
+seed 42 from the committed source JSONs in `src/creativegainbench/artifacts/`:
 
 ```bash
-download-datasets
+prepare-artifacts
+calibrate-delta-d
 ```
 
-This downloads three datasets into `data/`:
+Optional `.env`:
 
-| Domain | Source | Filter |
-|--------|--------|--------|
-| Scientific proposal writing | [TimSchopf/RINoBench](https://huggingface.co/datasets/TimSchopf/RINoBench) | `novelty_score <= 2` |
-| Creative writing | [liweijiang/infinite-chats-taxonomy](https://huggingface.co/datasets/liweijiang/infinite-chats-taxonomy) | `category == "Creative Content Generation"` |
-| Mathematical proof writing | [SphereLab/FormalMATH-All](https://huggingface.co/datasets/SphereLab/FormalMATH-All) | None (full dataset) |
+```
+HF_TOKEN=hf_...
+OPENAI_API_KEY=sk_...
+OLLAMA_API_KEY=ollama
+```
 
-## 2. Creating subsets
+## End-to-end (Ollama)
 
 ```bash
+# 1) Eval prompts (HF subsets if downloaded, else packaged held-out bank)
 create-subset
-```
 
-Writes normalized `{"prompt": ...}` JSONL into `data/subset/`:
+# 2) Frozen artifacts (codebook + KenLM on decontaminated train corpus)
+prepare-artifacts
+calibrate-delta-d
 
-- **infinity_chat_subset.jsonl** — first user message (300 samples, seed=42)
-- **formalmath_subset.jsonl** — Algebra / Number Theory `refined_statement` as prompt (300 samples)
-- **rinobench_subset.jsonl** — research idea fields composed into a prompt (~299 rows)
-
-## 3. Estimating multi-provider cost
-
-After subsets exist:
-
-```bash
-estimate-cost --sample 10 --n 5
-```
-
-This does **not** run generation. It:
-
-1. Samples prompts from all three domains
-2. Fetches live OpenRouter prices for GPT / Claude / Gemini and for open-model **$/token cross-quotes**
-3. Lists Ollama Cloud models (`/api/tags`) for Llama / DeepSeek / Kimi / GLM / Qwen availability (no local `ollama pull`)
-4. Estimates **generation + LLM-as-judge** costs
-5. Writes a Markdown summary and JSON under `data/evaluation/` (e.g. `cost_estimate_<timestamp>.md`)
-
-Open-model execution path is **Ollama Cloud** (subscription / GPU-time quota, not $/token). Dollar figures for those families are OpenRouter cross-quotes for research comparison only.
-
-Useful flags: `--domains`, `--assumed-completion-tokens`, `--assumed-judge-completion-tokens`, `--output-md`, `--output-json`.
-
-## 4. Running inference
-
-```bash
+# 3) Generate with Ollama
 python -m creativegainbench.model \
-  --data data/subset/infinity_chat_subset.jsonl \
-  --limit 10 \
-  --n 5
+  --provider ollama --model gemma2:2b \
+  --data data/subset/eval_all_domains.jsonl \
+  --limit 20 --n 1 --workers 1
+
+# 4) Score with calibrated CUE + Ollama receiver
+run-benchmark \
+  --results data/results/gemma2_2b/<timestamp>/eval_all_domains.jsonl \
+  --cue-provider ollama --cue-model gemma2:2b \
+  --receiver ollama --receiver-model gemma2:2b \
+  --aggregate \
+  --output data/evaluation/gemma2_2b_r_creativity.jsonl
+
+# Optional multi-agent G_k path
+run-mas --data data/subset/eval_all_domains.jsonl --limit 5 \
+  --agents gemma2:2b,gemma2:2b --joint-model gemma2:2b
+run-benchmark --results data/results/mas_.../<ts>/eval_all_domains.jsonl \
+  --cue-provider ollama --receiver ollama --aggregate
 ```
 
-Runs gpt-4o-mini (temperature=1.0, top_p=0.9) on prompts and generates `n` responses per prompt. Results are saved to `data/results/<model>/<timestamp>/<input_filename>.jsonl`. Use `--workers` to control concurrency (default: min(limit, 64)).
+## Dataset download (optional)
+
+```bash
+download-datasets   # HF_TOKEN optional for public datasets
+create-subset       # decontaminates vs frozen probe set P
+```
+
+## Package layout
+
+```
+src/creativegainbench/
+├── ideas/            # MiniLM spans, codebook, artifact loader
+├── metrics/          # cue (+ belief receiver), KenLM R_D, R_B, G_k
+├── receivers/        # hash / openai / ollama
+├── artifacts/        # probes, train corpus, KenLM, δ_D, manifests
+├── eval/             # benchmark_eval, mas_infer, report
+├── utils/            # download, eval prompts, contamination
+└── benchmark_score.py
+```
+
+## Tests
+
+```bash
+pytest -q
+```
+
+## Formal backing
+
+`math_backing/` — Lean proofs for `Rcreativity`, gates, and D-channel protocol.
+
+## Planned work
+
+- Swap KenLM for fine-tuned LLM based idea segmentation and encoding (replacing
+  the MiniLM span encoder + frozen codebook + KenLM n-gram compressor).

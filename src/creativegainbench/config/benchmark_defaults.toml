@@ -1,0 +1,32 @@
+# CreativeGainBench defaults — aligned with math_backing Rcreativity.
+
+[score]
+alpha = 1.0
+# Single-agent default; MAS rows use lambda_g_mas when lambda_g is 0.
+lambda_g = 0.0
+lambda_g_mas = 1.0
+# Overridden by artifacts/delta_d_v1.json when present.
+delta_d = 0.0
+
+[ideas]
+n = 3
+vocab_size = 512
+span_encoder = "minilm"
+span_encoder_model = "sentence-transformers/all-MiniLM-L6-v2"
+embedding_dim = 384
+boundary_threshold = 0.5
+
+[kenlm]
+order = 3
+
+[receiver_expansion]
+n_samples = 4
+temperature = 1.0
+
+[cue]
+provider = "ollama"
+model = "gemma2:2b"
+
+[artifacts]
+version = "v1"
+seed = 42
