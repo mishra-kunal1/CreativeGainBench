@@ -2,6 +2,7 @@
 .venv/
 CLAUDE.md
 data/
+.venv/
 *.egg-info/
 __pycache__/
 *.pyc
