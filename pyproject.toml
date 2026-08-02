@@ -10,6 +10,7 @@ dependencies = [
     "torch",
     "sentence-transformers",
     "kenlm",
+    "scipy",
     "tomli; python_version < '3.11'",
 ]
 
@@ -24,6 +25,8 @@ prepare-artifacts = "creativegainbench.artifacts.prepare:main"
 calibrate-delta-d = "creativegainbench.artifacts.calibrate_delta_d:main"
 run-benchmark = "creativegainbench.eval.benchmark_eval:main"
 run-mas = "creativegainbench.eval.mas_infer:main"
+run-mas-agents = "creativegainbench.eval.mas_agents:main"
+run-trajectory-metrics = "creativegainbench.eval.trajectory_eval:main"
 benchmark-report = "creativegainbench.eval.report:main"
 
 [build-system]
