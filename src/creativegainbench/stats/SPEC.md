@@ -12,6 +12,11 @@ Canonical input for one `(metric, framework, model-vs-human)` comparison:
 | `human` | `(n_h,)` float | yes | Human-arm scores (also calibration observations) |
 | `model` | `(n_m,)` float | yes | Model-arm scores |
 | `item_ids` | `(n,)` | for paired judge analyses | Shared item keys; equal `len(human)==len(model)` |
+
+`Sample.require_paired()` enforces equal `human`/`model` lengths, non-`None`
+`item_ids`, and `len(item_ids) == len(human)`. Direct `StatisticalMeasure.evaluate()`
+calls for `PAIRED` measures raise if that contract is violated; the pipeline also
+skips paired measures when `item_ids` is absent.
 | `rater_matrix` | `(n_items, n_raters)` | optional | Human multi-rater matrix; **NaNs allowed** |
 | `predictive` | `(n_items, n_draws)` | optional | Predictive draws **per item** (row-aligned with `human`) |
 
@@ -59,12 +64,18 @@ Single engine for every measure:
 
 1. **BCa bootstrap CI** (`n_boot`, `ci_level`) — bias-corrected and accelerated,
    with jackknife acceleration. Paired / unpaired / row-bootstrap variants share
-   the same BCa transform.
+   the same BCa transform. Non-finite bootstrap/jackknife replicates are
+   dropped before `z0` / acceleration / quantiles (avoids all-NaN CIs when a
+   few resamples are invalid, e.g. sparse reliability matrices).
 2. **Permutation null** (`n_perm`) — two-sided for signed differences; one-sided
    (upper) for non-negative distances. Calibration uses shuffle-observations
    against fixed predictive rows.
 
+Scalar energy distance and CRPS pairwise absolute terms use **O(n log n)**
+sorted closed forms (no full pairwise matrices).
+
 Defaults live in `config.yaml` (`n_boot`, `n_perm`, `ci_level`, `alpha`).
+`ComparisonPipeline(..., alpha=)` propagates α to every measure it owns.
 
 ## Multiplicity
 

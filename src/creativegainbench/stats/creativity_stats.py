@@ -102,6 +102,10 @@ class Sample:
     def require_paired(self):
         if len(self.human) != len(self.model):
             raise ValueError("Paired analysis requires equal-length human/model arrays.")
+        if self.item_ids is None:
+            raise ValueError("Paired analysis requires item_ids.")
+        if len(self.item_ids) != len(self.human):
+            raise ValueError("item_ids length must match human/model arrays.")
 
     def require_predictive(self):
         if self.predictive is None:
@@ -200,19 +204,29 @@ class Resampler:
         return self._bca_from_replicates(theta, boot, jack)
 
     def _bca_from_replicates(self, theta, boot, jack):
-        prop = np.mean(boot < theta)
+        boot = np.asarray(boot, float)
+        jack = np.asarray(jack, float)
+        boot_f = boot[np.isfinite(boot)]
+        jack_f = jack[np.isfinite(jack)]
+        if not np.isfinite(theta) or len(boot_f) < 2:
+            return float(theta), float("nan"), float("nan")
+
+        prop = np.mean(boot_f < theta)
         prop = min(max(prop, 1e-6), 1 - 1e-6)
         z0 = _norm_ppf(prop)
-        jbar = jack.mean()
-        num = np.sum((jbar - jack) ** 3)
-        den = 6.0 * (np.sum((jbar - jack) ** 2) ** 1.5) + 1e-12
-        a = num / den
+        if len(jack_f) >= 2:
+            jbar = jack_f.mean()
+            num = np.sum((jbar - jack_f) ** 3)
+            den = 6.0 * (np.sum((jbar - jack_f) ** 2) ** 1.5) + 1e-12
+            a = num / den
+        else:
+            a = 0.0
 
         alpha = 1 - self.ci_level
         z_lo, z_hi = _norm_ppf(alpha / 2), _norm_ppf(1 - alpha / 2)
         lo = _norm_cdf(z0 + (z0 + z_lo) / (1 - a * (z0 + z_lo)))
         hi = _norm_cdf(z0 + (z0 + z_hi) / (1 - a * (z0 + z_hi)))
-        ci_low, ci_high = np.quantile(boot, [lo, hi])
+        ci_low, ci_high = np.quantile(boot_f, [lo, hi])
         return float(theta), float(ci_low), float(ci_high)
 
     # --- permutation null (difference test) ------------------------------ #
@@ -344,8 +358,42 @@ class StatisticalMeasure(ABC):
 # --------------------------------------------------------------------------- #
 # Worked measures -- one per geometry, covering generator + judge              #
 # --------------------------------------------------------------------------- #
+def _mean_pairwise_abs_1d(x: np.ndarray) -> float:
+    """Mean |x_i - x_j| over all pairs including i=j. O(n log n) via sort."""
+    x = np.sort(np.asarray(x, float).ravel())
+    n = len(x)
+    if n == 0:
+        return 0.0
+    # sum_{i,j} |x_i-x_j| = 2 * sum_i (2*i - n + 1) * x_{(i)}  (0-based i)
+    coef = 2 * np.arange(n) - n + 1
+    return float(2.0 * np.dot(coef, x) / (n * n))
+
+
+def _mean_cross_abs_1d(a: np.ndarray, b: np.ndarray) -> float:
+    """Mean |a_i - b_j| over all cross pairs. O((n+m) log) via sort + scan."""
+    a = np.sort(np.asarray(a, float).ravel())
+    b = np.sort(np.asarray(b, float).ravel())
+    n, m = len(a), len(b)
+    if n == 0 or m == 0:
+        return 0.0
+    pref = np.concatenate([[0.0], np.cumsum(b)])
+    j = 0
+    total = 0.0
+    for i in range(n):
+        while j < m and b[j] < a[i]:
+            j += 1
+        left = pref[j]
+        right = pref[m] - pref[j]
+        total += j * a[i] - left + right - (m - j) * a[i]
+    return float(total / (n * m))
+
+
 class EnergyDistance(StatisticalMeasure):
-    """Marginal-shape default. Ties-safe, honest permutation null. Generator."""
+    """Marginal-shape default. Ties-safe, honest permutation null. Generator.
+
+    Uses the O(n log n) 1-D energy-distance form (scalar scores); avoids
+    materializing full pairwise distance matrices.
+    """
     pairing = Pairing.UNPAIRED
     geometry = Geometry.NONNEG_DISTANCE
 
@@ -353,10 +401,11 @@ class EnergyDistance(StatisticalMeasure):
     def name(self): return "energy_distance"
 
     def statistic(self, h, m):
-        d_hm = np.abs(h[:, None] - m[None, :]).mean()
-        d_hh = np.abs(h[:, None] - h[None, :]).mean()
-        d_mm = np.abs(m[:, None] - m[None, :]).mean()
-        return float(2 * d_hm - d_hh - d_mm)
+        return float(
+            2 * _mean_cross_abs_1d(h, m)
+            - _mean_pairwise_abs_1d(h)
+            - _mean_pairwise_abs_1d(m)
+        )
 
     def default_margin(self, s: Sample):
         return 0.2 * s.pooled_sd   # "small" in pooled-SD units; OVERRIDE per benchmark
@@ -487,17 +536,15 @@ def mean_crps(obs: np.ndarray, draws: np.ndarray) -> float:
 
     For each item: CRPS = E|X - y| - 0.5 E|X - X'| with X, X' iid from the
     empirical predictive (columns of ``draws``).
+
+    E|X - X'| uses the O(n_draws log n_draws) sorted closed form per item.
     """
     obs = np.asarray(obs, float).ravel()
     draws = np.asarray(draws, float)
     if draws.ndim != 2 or draws.shape[0] != len(obs):
         raise ValueError("draws must have shape (n_items, n_draws) matching obs.")
     term1 = np.mean(np.abs(draws - obs[:, None]), axis=1)
-    # pairwise |X - X'| averaged over draw pairs (includes diagonal zeros)
-    term2 = np.empty(len(obs))
-    for i in range(len(obs)):
-        d = draws[i]
-        term2[i] = np.mean(np.abs(d[:, None] - d[None, :]))
+    term2 = np.array([_mean_pairwise_abs_1d(draws[i]) for i in range(len(obs))])
     return float(np.mean(term1 - 0.5 * term2))
 
 
@@ -505,6 +552,8 @@ def pit_values(obs: np.ndarray, draws: np.ndarray) -> np.ndarray:
     """Probability integral transform: empirical CDF of draws at each obs."""
     obs = np.asarray(obs, float).ravel()
     draws = np.asarray(draws, float)
+    if draws.ndim != 2 or draws.shape[0] != len(obs):
+        raise ValueError("draws must have shape (n_items, n_draws) matching obs.")
     # Mid-rank for ties: (#{X < y} + 0.5 #{X = y}) / M
     lt = np.sum(draws < obs[:, None], axis=1)
     eq = np.sum(draws == obs[:, None], axis=1)
@@ -759,9 +808,12 @@ def report_to_dict(report: ComparisonReport, model: Optional[str] = None) -> dic
 
 class ComparisonPipeline:
     def __init__(self, measures, resampler=None, alpha=0.05):
-        self.measures = measures
+        self.measures = list(measures)
         self.rs = resampler or Resampler()
         self.alpha = alpha
+        # Pipeline-level alpha overrides each measure's significance threshold.
+        for msr in self.measures:
+            msr.alpha = alpha
 
     def _applicable(self, metric, sample):
         paired = (sample.item_ids is not None

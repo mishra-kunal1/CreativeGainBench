@@ -100,9 +100,58 @@ def test_sample_require_paired_rejects_unequal_lengths():
         s.require_paired()
 
 
+def test_sample_require_paired_requires_item_ids():
+    s = Sample([1.0, 2.0], [1.5, 2.5])  # equal lengths, no item_ids
+    with pytest.raises(ValueError, match="item_ids"):
+        s.require_paired()
+
+
+def test_sample_require_paired_rejects_mismatched_item_ids():
+    s = Sample([1.0, 2.0], [1.5, 2.5], item_ids=np.array([0]))
+    with pytest.raises(ValueError, match="item_ids length"):
+        s.require_paired()
+
+
 def test_sample_require_paired_accepts_equal_lengths():
     s = Sample([1.0, 2.0], [1.5, 2.5], item_ids=np.array([0, 1]))
     s.require_paired()  # no raise
+
+
+def test_energy_distance_matches_pairwise_definition():
+    rng = np.random.default_rng(20)
+    h = rng.normal(0, 1, 25)
+    m = rng.normal(0.2, 1.2, 30)
+    naive = (
+        2 * np.abs(h[:, None] - m[None, :]).mean()
+        - np.abs(h[:, None] - h[None, :]).mean()
+        - np.abs(m[:, None] - m[None, :]).mean()
+    )
+    assert EnergyDistance().statistic(h, m) == pytest.approx(naive, rel=1e-12)
+
+
+def test_bca_ignores_nonfinite_replicates():
+    rs = Resampler(n_boot=10, n_perm=10, seed=21)
+    theta = 0.5
+    boot = np.array([0.4, 0.5, np.nan, 0.6, 0.55, np.inf, 0.45, 0.52, 0.48, 0.51])
+    jack = np.array([0.49, 0.51, np.nan, 0.50, 0.48])
+    est, lo, hi = rs._bca_from_replicates(theta, boot, jack)
+    assert est == 0.5
+    assert np.isfinite(lo) and np.isfinite(hi)
+    assert lo <= hi
+
+
+def test_pit_values_rejects_bad_shape():
+    with pytest.raises(ValueError, match="draws must have shape"):
+        pit_values(np.array([0.5]), np.array([0.0, 0.5, 1.0]))  # 1-D
+
+
+def test_pipeline_alpha_propagates_to_measures():
+    m1 = HedgesG(alpha=0.10)
+    m2 = EnergyDistance(alpha=0.10)
+    pipe = ComparisonPipeline(measures=[m1, m2], alpha=0.01)
+    assert m1.alpha == 0.01
+    assert m2.alpha == 0.01
+    assert pipe.alpha == 0.01
 
 
 def test_signed_difference_verdict_paths():
