@@ -10,6 +10,7 @@ dependencies = [
     "torch",
     "sentence-transformers",
     "kenlm",
+    "numpy",
     "scipy",
     "tomli; python_version < '3.11'",
 ]
