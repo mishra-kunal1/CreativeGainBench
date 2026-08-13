@@ -1,0 +1,8 @@
+# Override with DATABASE_URL in production.
+database_url: "postgres://poems:poems@localhost:5432/poems"
+artifacts_rel: "src/creativegainbench/artifacts/poetry_v2"
+metric_version: "poetry_v2"
+max_chars: 4000
+seed: 42
+delta_d_quantile: 0.95
+min_neg_per_domain: 50
