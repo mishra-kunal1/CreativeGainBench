@@ -107,6 +107,29 @@ class CUEBeliefReceiver:
         )
         return self._parse_probs(self._chat(prompt))
 
+    def elicit_prior_conditioned(
+        self, task_prompt: str, upstream_text: str
+    ) -> list[float]:
+        """
+        Belief after seeing an upstream agent's text, before the downstream
+        output — used for Edge-CUE so the delta is attributable to the handoff.
+        """
+        labels = ", ".join(self.outcomes)
+        up = upstream_text.strip()
+        if len(up) > 2500:
+            up = up[:2500]
+        prompt = (
+            "You are a calibrated decision receiver. You have seen an upstream "
+            "agent's contribution but not the next agent's output. Assign "
+            "probabilities over outcome labels for how the eventual answer "
+            "will look given only this upstream text.\n"
+            f"Labels: {labels}\n"
+            "Return ONLY JSON mapping each label to a probability (sum≈1).\n\n"
+            f"Task:\n{task_prompt.strip()}\n\n"
+            f"Upstream agent text:\n{up}\n"
+        )
+        return self._parse_probs(self._chat(prompt))
+
     def elicit_posterior(self, task_prompt: str, y: str) -> list[float]:
         labels = ", ".join(self.outcomes)
         y_clip = y.strip()
@@ -151,11 +174,34 @@ class CUEBeliefReceiver:
         return len(self.outcomes) - 1  # default low_quality
 
     def compute_cue_for_output(
-        self, task_prompt: str, y: str
+        self,
+        task_prompt: str,
+        y: str,
+        *,
+        external_outcome_index: int | None = None,
     ) -> tuple[float, CUEModel, dict]:
+        """
+        CUE via Brier improvement on a realized outcome.
+
+        If ``external_outcome_index`` is provided, that label is used as z*
+        (math-faithful: receiver does not grade its own classification).
+        Otherwise falls back to self-classification (legacy / circular).
+        """
         prior = self.elicit_prior(task_prompt)
         posterior = self.elicit_posterior(task_prompt, y)
-        outcome = self.classify_outcome(task_prompt, y)
+        if external_outcome_index is not None:
+            outcome = int(external_outcome_index)
+            if not (0 <= outcome < len(self.outcomes)):
+                raise ValueError(
+                    f"external_outcome_index {outcome} out of range for "
+                    f"{len(self.outcomes)} outcomes"
+                )
+            outcome_source = "external"
+            z_star_source = "external"
+        else:
+            outcome = self.classify_outcome(task_prompt, y)
+            outcome_source = "self_classify"
+            z_star_source = "self"
         bits = max(bit_length_utf8(y), 8.0)
         delta = brier_delta(prior, posterior, outcome)
         model = CUEModel(brier_delta=delta, bit_length=bits)
@@ -166,5 +212,10 @@ class CUEBeliefReceiver:
             "outcome_index": outcome,
             "outcome_label": self.outcomes[outcome],
             "outcomes": list(self.outcomes),
+            "outcome_source": outcome_source,
+            # Canonical validation field (F0.2): "external" | "self"
+            "z_star_source": z_star_source,
+            "brier_delta": float(delta),
+            "bit_length": float(bits),
         }
         return cue_val, model, diag
