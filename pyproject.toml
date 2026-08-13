@@ -9,7 +9,6 @@ dependencies = [
     "python-dotenv",
     "torch",
     "sentence-transformers",
-    "kenlm",
     "scipy",
     "tomli; python_version < '3.11'",
 ]
@@ -43,8 +42,7 @@ creativegainbench = [
     "artifacts/probes/*.json",
     "artifacts/codebook/*.pt",
     "artifacts/models/*.pt",
-    "artifacts/models/*.arpa",
-    "artifacts/models/*.klm",
+    "artifacts/models/*.pkl",
     "artifacts/manifest.json",
 ]
 

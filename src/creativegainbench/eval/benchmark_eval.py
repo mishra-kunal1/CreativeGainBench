@@ -18,6 +18,7 @@ from pathlib import Path
 from creativegainbench.benchmark_score import compute_r_creativity
 from creativegainbench.ideas.artifacts import load_artifacts, load_config
 from creativegainbench.metrics.cue_receiver import CUEBeliefConfig, CUEBeliefReceiver
+from creativegainbench.metrics.delta_d import load_delta_d_thresholds, resolve_delta_d
 from creativegainbench.metrics.interaction_gain import mas_outputs_from_row
 from creativegainbench.receivers.hash_receiver import HashReceiverAgent
 from creativegainbench.utils.contamination import (
@@ -43,11 +44,11 @@ def _extract_response(item: dict, response_key: str) -> str | None:
     return None
 
 
-def _load_delta_d(cfg: dict, artifacts_root: Path, version: str) -> float:
-    sidecar = artifacts_root / f"delta_d_{version}.json"
-    if sidecar.exists():
-        return float(json.loads(sidecar.read_text())["delta_d"])
-    return float(cfg["score"]["delta_d"])
+def _load_thresholds(artifacts_root: Path, version: str) -> dict:
+    versioned = artifacts_root / f"delta_d_thresholds_{version}.json"
+    stable = artifacts_root / "delta_d_thresholds.json"
+    path = versioned if versioned.exists() else stable
+    return load_delta_d_thresholds(path)
 
 
 def _build_receiver(name: str, pipeline, model: str):
@@ -124,7 +125,7 @@ def main() -> None:
     from creativegainbench.ideas.artifacts import ARTIFACTS_ROOT
 
     pipeline = load_artifacts(version=version, device=args.device)
-    delta_d = _load_delta_d(cfg, ARTIFACTS_ROOT, version)
+    thresholds = _load_thresholds(ARTIFACTS_ROOT, version)
     receiver = _build_receiver(args.receiver, pipeline, args.receiver_model)
 
     cue_receiver: CUEBeliefReceiver | None = None
@@ -133,7 +134,6 @@ def main() -> None:
             CUEBeliefConfig(provider=args.cue_provider, model=args.cue_model)
         )
 
-    # Contamination check on prompts present in results.
     if not args.skip_probe_check:
         probes_path = (
             ARTIFACTS_ROOT
@@ -188,6 +188,11 @@ def main() -> None:
             else:
                 effective_lambda = float(score_cfg.get("lambda_g_mas", 1.0))
 
+            domain = item.get("domain_cluster", item.get("domain"))
+            delta_d = resolve_delta_d(thresholds, domain)
+            edge_chain = item.get("edge_cue_chain")
+            handoff = item.get("handoff_gain_rate")
+
             result = compute_r_creativity(
                 y,
                 pipeline=pipeline,
@@ -200,6 +205,8 @@ def main() -> None:
                 n_samples=int(rx_cfg["n_samples"]),
                 temperature=float(rx_cfg["temperature"]),
                 use_stub_cue=use_stub,
+                edge_cue_chain=edge_chain,
+                handoff_gain_rate=float(handoff) if handoff is not None else None,
             )
             row = {
                 "prompt": item.get("prompt"),
@@ -220,7 +227,7 @@ def main() -> None:
             if (line_i + 1) % 5 == 0:
                 print(f"scored {n_written} items...")
 
-    print(f"Wrote {n_written} scores to {args.output} (delta_d={delta_d})")
+    print(f"Wrote {n_written} scores to {args.output}")
 
     if args.aggregate and n_written > 0:
         from creativegainbench.eval.report import aggregate

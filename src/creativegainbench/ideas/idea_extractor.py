@@ -92,6 +92,56 @@ def default_sentence_splitter(text: str) -> List[str]:
     return spans or [text]
 
 
+def poetry_line_splitter(text: str) -> List[str]:
+    """
+    Verse-aware span candidates: prefer line / stanza breaks over prose
+    sentence punctuation so poems do not collapse into a handful of spans.
+    """
+    text = (text or "").strip()
+    if not text:
+        return []
+    # Split stanzas on blank lines, then lines within stanzas.
+    stanzas = re.split(r"\n\s*\n+", text)
+    spans: List[str] = []
+    for stanza in stanzas:
+        for line in stanza.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            # Further split long prose-like lines on sentence ends.
+            if len(line) > 120 and re.search(r"[.!?]", line):
+                parts = re.split(r"(?<=[.!?])\s+", line)
+                spans.extend(p.strip() for p in parts if p.strip())
+            else:
+                spans.append(line)
+    return spans or default_sentence_splitter(text)
+
+
+def verse_line_splitter(text: str, min_span_chars: int = 15) -> List[str]:
+    """
+    Verse-aware span candidates: poem lines, merging very short lines forward
+    so one-word lines don't become standalone ideas. Falls back to the whole
+    text if there are no line breaks.
+    """
+    text = (text or "").strip()
+    if not text:
+        return []
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    spans: List[str] = []
+    buf = ""
+    for ln in lines:
+        buf = f"{buf} {ln}".strip() if buf else ln
+        if len(buf) >= min_span_chars:
+            spans.append(buf)
+            buf = ""
+    if buf:
+        if spans:
+            spans[-1] = f"{spans[-1]} {buf}"
+        else:
+            spans.append(buf)
+    return spans or [text]
+
+
 def segment_into_idea_spans(
     text: str,
     sentence_splitter: Callable[[str], List[str]] | None = None,
@@ -116,9 +166,11 @@ def extract_ideas(
         if boundary_detector is None:
             # Fallback: each span is its own idea (deterministic, frozen-protocol safe).
             return [
-                Idea(text=span, embedding=embed)
+                Idea(text=span, embedding=embed.detach().cpu())
                 for span, embed in zip(spans, span_embeds)
             ]
+        bd_device = next(boundary_detector.parameters()).device
+        span_embeds = span_embeds.to(bd_device)
         boundary_probs = boundary_detector(span_embeds)
 
     ideas: List[Idea] = []
@@ -129,7 +181,7 @@ def extract_ideas(
         buffer_embeds.append(embed)
         if float(p.item()) > boundary_threshold:
             idea_text = " ".join(buffer_spans)
-            idea_embed = torch.stack(buffer_embeds).mean(dim=0)
+            idea_embed = torch.stack(buffer_embeds).mean(dim=0).detach().cpu()
             ideas.append(Idea(text=idea_text, embedding=idea_embed))
             buffer_spans, buffer_embeds = [], []
 
@@ -137,7 +189,7 @@ def extract_ideas(
         ideas.append(
             Idea(
                 text=" ".join(buffer_spans),
-                embedding=torch.stack(buffer_embeds).mean(dim=0),
+                embedding=torch.stack(buffer_embeds).mean(dim=0).detach().cpu(),
             )
         )
     return ideas

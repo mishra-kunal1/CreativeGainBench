@@ -1,6 +1,6 @@
 """
-Prepare frozen v1 artifacts: idea codebook, KenLM compressor, boundary detector,
-and manifest hashes.
+Prepare frozen v1 artifacts: idea codebook, CountNgram deformation context,
+boundary detector, and manifest hashes.
 
 Training corpus excludes frozen probes P and held-out eval prompts.
 """
@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import pickle
 from pathlib import Path
 
 import torch
@@ -24,8 +25,9 @@ from creativegainbench.ideas.idea_extractor import (
     default_sentence_splitter,
     extract_ideas,
 )
+from creativegainbench.ideas.idea_ngram import IdeaCodebook
 from creativegainbench.ideas.span_encoder import build_span_encoder
-from creativegainbench.metrics.kenlm_compressor import train_kenlm
+from creativegainbench.metrics.deformation import build_domain_context
 from creativegainbench.utils.build_eval_prompts import (
     _formalmath_prompt,
     _rinobench_prompt,
@@ -148,34 +150,10 @@ def _collect_idea_embeddings(
     return torch.stack(embeds, dim=0)
 
 
-def _texts_to_symbol_seqs(
-    texts: list[str],
-    encoder: nn.Module,
-    centroids: torch.Tensor,
-    boundary: IdeaBoundaryDetector | None,
-    boundary_threshold: float,
-) -> list[list[int]]:
-    seqs: list[list[int]] = []
-    for text in texts:
-        ideas = extract_ideas(
-            text,
-            span_encoder=encoder,
-            boundary_detector=boundary,
-            boundary_threshold=boundary_threshold,
-        )
-        if not ideas:
-            continue
-        dists = torch.cdist(
-            torch.stack([i.embedding for i in ideas], dim=0), centroids
-        )
-        seqs.append(torch.argmin(dists, dim=1).tolist())
-    return seqs
-
-
 def _build_train_corpus(root: Path, version: str, seed: int) -> tuple[list[str], set[str], set[str]]:
     probes_path = root / "probes" / f"probes_{version}_seed{seed}.json"
     heldout_path = root / f"heldout_prompts_{version}.json"
-    train_path = root / f"kenlm_train_corpus_{version}.json"
+    train_path = root / f"train_corpus_{version}.json"
 
     probe_hashes = load_probe_hashes(probes_path)
     eval_hashes: set[str] = set()
@@ -192,7 +170,6 @@ def _build_train_corpus(root: Path, version: str, seed: int) -> tuple[list[str],
     before = len(raw)
     kept = filter_contaminated(raw, banned)
     after_filter = len(kept)
-    # Dedup by hash while preserving order.
     seen: set[str] = set()
     unique: list[str] = []
     for t in kept:
@@ -232,11 +209,11 @@ def prepare_artifacts(
     version = version or cfg["artifacts"]["version"]
     seed = int(seed if seed is not None else cfg["artifacts"]["seed"])
     ideas_cfg = cfg["ideas"]
-    kenlm_cfg = cfg.get("kenlm", {})
+    ngram_cfg = cfg.get("count_ngram", {})
 
     vocab_size = int(ideas_cfg["vocab_size"])
     boundary_threshold = float(ideas_cfg["boundary_threshold"])
-    order = int(kenlm_cfg.get("order", ideas_cfg.get("n", 3)))
+    order = int(ngram_cfg.get("order", ideas_cfg.get("n", 3)))
     span_backend = str(ideas_cfg.get("span_encoder", "minilm"))
     span_model = str(
         ideas_cfg.get(
@@ -274,41 +251,49 @@ def prepare_artifacts(
         train_texts, encoder, boundary, boundary_threshold
     )
     centroids = _kmeans(embeds, k=vocab_size, seed=seed)
-    seqs = _texts_to_symbol_seqs(
-        train_texts, encoder, centroids, boundary, boundary_threshold
+    codebook = IdeaCodebook(centroids=centroids)
+
+    with open(probes_path) as f:
+        probe_strings = list(json.load(f)["strings"])
+
+    print(f"Building CountNgram deformation context (order={order})...")
+    deformation_ctx = build_domain_context(
+        domain=0,
+        train_texts=train_texts,
+        probe_texts=probe_strings,
+        span_encoder=encoder,
+        codebook=codebook,
+        boundary_detector=boundary,
+        sentence_splitter=default_sentence_splitter,
+        boundary_threshold=boundary_threshold,
+        order=order,
     )
 
     codebook_path = root / "codebook" / f"idea_codebook_{version}.pt"
-    kenlm_path = root / "models" / f"idea_kenlm_{version}.arpa"
+    ctx_path = root / "models" / f"deformation_ctx_{version}.pkl"
     boundary_path = root / "models" / f"idea_boundary_{version}.pt"
     codebook_path.parent.mkdir(parents=True, exist_ok=True)
-    kenlm_path.parent.mkdir(parents=True, exist_ok=True)
-
-    print(f"Training KenLM (order={order}) on {len(seqs)} idea-symbol sequences...")
-    trained_path = train_kenlm(seqs, kenlm_path, order=order)
-    kenlm_rel = f"models/{trained_path.name}"
-    if trained_path.resolve() != kenlm_path.resolve():
-        stable = root / "models" / f"idea_kenlm_{version}{trained_path.suffix}"
-        if trained_path.resolve() != stable.resolve():
-            stable.write_bytes(trained_path.read_bytes())
-            trained_path = stable
-            kenlm_rel = f"models/{stable.name}"
+    ctx_path.parent.mkdir(parents=True, exist_ok=True)
 
     torch.save({"centroids": centroids.detach().cpu()}, codebook_path)
     torch.save(boundary.state_dict(), boundary_path)
+    with open(ctx_path, "wb") as f:
+        pickle.dump(deformation_ctx, f)
 
-    stale_lm = root / "models" / f"idea_sequence_lm_{version}.pt"
-    if stale_lm.exists():
-        stale_lm.unlink()
+    for stale_name in (f"idea_sequence_lm_{version}.pt",):
+        stale = root / "models" / stale_name
+        if stale.exists():
+            stale.unlink()
+
+    corpus_rel = f"train_corpus_{version}.json"
+    ctx_rel = f"models/deformation_ctx_{version}.pkl"
 
     file_map = {
         f"probes/probes_{version}_seed{seed}.json": _sha256_file(probes_path),
         f"task_battery_{version}.json": _sha256_file(root / f"task_battery_{version}.json"),
-        f"kenlm_train_corpus_{version}.json": _sha256_file(
-            root / f"kenlm_train_corpus_{version}.json"
-        ),
+        corpus_rel: _sha256_file(root / corpus_rel),
         f"codebook/idea_codebook_{version}.pt": _sha256_file(codebook_path),
-        kenlm_rel: _sha256_file(trained_path),
+        ctx_rel: _sha256_file(ctx_path),
         f"models/idea_boundary_{version}.pt": _sha256_file(boundary_path),
     }
     if (root / f"heldout_prompts_{version}.json").exists():
@@ -328,9 +313,9 @@ def prepare_artifacts(
                 "embedding_dim": embedding_dim,
                 "span_encoder": span_backend,
                 "span_encoder_model": span_model,
-                "compressor": "kenlm",
-                "kenlm_order": order,
-                "kenlm_path": kenlm_rel,
+                "compressor": "count_ngram",
+                "ngram_order": order,
+                "deformation_ctx_path": ctx_rel,
                 "train_corpus_size": len(train_texts),
                 "files": file_map,
             }
@@ -344,7 +329,7 @@ def prepare_artifacts(
     print(f"Prepared artifacts version={version} seed={seed}")
     print(f"  span encoder: {span_backend} ({span_model}), dim={embedding_dim}")
     print(f"  codebook: {codebook_path}")
-    print(f"  kenlm:    {trained_path}")
+    print(f"  deformation ctx: {ctx_path}")
     print(f"  boundary: {boundary_path}")
     print(f"  manifest: {manifest_path}")
     return manifest_path

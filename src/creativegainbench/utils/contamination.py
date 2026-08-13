@@ -1,8 +1,8 @@
 """
 Protocol contamination guards.
 
-Frozen probe set P and evaluation prompts must never enter the KenLM / codebook
-training corpus. Eval prompts must never equal probe strings.
+Frozen probe set P and evaluation prompts must never enter the CountNgram /
+codebook training corpus. Eval prompts must never equal probe strings.
 """
 
 from __future__ import annotations
@@ -62,7 +62,7 @@ def write_exclusion_manifest(
     train_dropped_deduplication: int,
 ) -> None:
     """
-    Write contamination audit metadata for the KenLM / codebook train corpus.
+    Write contamination audit metadata for the CountNgram / codebook train corpus.
 
     Invariant:
       train_raw == train_kept + train_dropped_contamination + train_dropped_deduplication
