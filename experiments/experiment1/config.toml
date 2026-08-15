@@ -1,0 +1,28 @@
+# Experiment 1 — multi-model poetry_v2 ladder
+# Freeze measurement artifacts; vary only the generator.
+
+db_url = "postgres://poems:poems@localhost:5432/poems"
+metric_version = "poetry_v2"
+artifacts_rel = "src/creativegainbench/artifacts/poetry_v2"
+split = "eval"
+max_chars = 4000
+seed = 42
+
+[generation]
+temperature = 1.0
+top_p = 0.9
+max_tokens = 1024
+workers = 2
+ollama_base = "http://127.0.0.1:11434/v1"
+
+# Capability ladder (local Ollama). Order = weak → stronger.
+models = [
+  "gemma2:2b",
+  "mistral:latest",
+  "llama3.1:8b",
+  "phi4:14b",
+]
+
+[scoring]
+cue_sample = 200
+cue_model = "gemma2:2b"   # fixed measurement receiver — do not change with generator

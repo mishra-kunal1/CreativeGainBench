@@ -1,0 +1,118 @@
+{
+  "tau": 0.25,
+  "order": 1,
+  "vocab_size": 512,
+  "backend": "soft_count",
+  "tau_calibration": {
+    "0.25": {
+      "n": 300,
+      "delta_d_95": 3.0385534999630197e-05,
+      "neg_pass_rate": 0.04666666666666667,
+      "gap_to_0.05": 0.003333333333333334
+    },
+    "0.5": {
+      "n": 300,
+      "delta_d_95": 7.172981085957543e-06,
+      "neg_pass_rate": 0.02666666666666667,
+      "gap_to_0.05": 0.023333333333333334
+    },
+    "1.0": {
+      "n": 300,
+      "delta_d_95": 2.404339508125424e-06,
+      "neg_pass_rate": 0.0,
+      "gap_to_0.05": 0.05
+    },
+    "2.0": {
+      "n": 300,
+      "delta_d_95": 1.3311481811095642e-06,
+      "neg_pass_rate": 0.0,
+      "gap_to_0.05": 0.05
+    }
+  },
+  "domains": {
+    "0": {
+      "n_train": 347,
+      "n_probe": 18,
+      "n_eval": 141,
+      "target_chars": 1263,
+      "soft_ctx": "domain_0_soft_ctx.pt"
+    },
+    "1": {
+      "n_train": 265,
+      "n_probe": 18,
+      "n_eval": 94,
+      "target_chars": 2264,
+      "soft_ctx": "domain_1_soft_ctx.pt"
+    },
+    "2": {
+      "n_train": 131,
+      "n_probe": 18,
+      "n_eval": 292,
+      "target_chars": 2213,
+      "soft_ctx": "domain_2_soft_ctx.pt"
+    },
+    "3": {
+      "n_train": 245,
+      "n_probe": 18,
+      "n_eval": 120,
+      "target_chars": 589,
+      "soft_ctx": "domain_3_soft_ctx.pt"
+    },
+    "4": {
+      "n_train": 103,
+      "n_probe": 17,
+      "n_eval": 0,
+      "target_chars": 1665,
+      "soft_ctx": "domain_4_soft_ctx.pt"
+    },
+    "5": {
+      "n_train": 207,
+      "n_probe": 18,
+      "n_eval": 221,
+      "target_chars": 978,
+      "soft_ctx": "domain_5_soft_ctx.pt"
+    },
+    "6": {
+      "n_train": 326,
+      "n_probe": 18,
+      "n_eval": 124,
+      "target_chars": 599,
+      "soft_ctx": "domain_6_soft_ctx.pt"
+    },
+    "7": {
+      "n_train": 73,
+      "n_probe": 18,
+      "n_eval": 81,
+      "target_chars": 687,
+      "soft_ctx": "domain_7_soft_ctx.pt"
+    },
+    "8": {
+      "n_train": 445,
+      "n_probe": 18,
+      "n_eval": 158,
+      "target_chars": 2161,
+      "soft_ctx": "domain_8_soft_ctx.pt"
+    },
+    "9": {
+      "n_train": 289,
+      "n_probe": 18,
+      "n_eval": 114,
+      "target_chars": 2178,
+      "soft_ctx": "domain_9_soft_ctx.pt"
+    },
+    "10": {
+      "n_train": 305,
+      "n_probe": 18,
+      "n_eval": 144,
+      "target_chars": 613,
+      "soft_ctx": "domain_10_soft_ctx.pt"
+    },
+    "11": {
+      "n_train": 243,
+      "n_probe": 8,
+      "n_eval": 0,
+      "target_chars": 248,
+      "soft_ctx": "domain_11_soft_ctx.pt"
+    }
+  }
+}

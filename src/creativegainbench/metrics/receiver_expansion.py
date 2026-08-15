@@ -1,6 +1,14 @@
 """
 R_B^{→A}(y, A) = H(Gen(A | y, T)) / log|W|, via torch soft clustering
 over receiver-generation embeddings, using the SAME frozen idea codebook.
+
+Feasibility / utility gating (F0.3)
+----------------------------------
+Lean ``RewardB`` is utility-gated (infeasible → 0). This implementation is
+**ungated**: it always returns the normalized expansion in [0, 1] regardless
+of ``feasibility_bit(y)``. Interpret results as a ``BBase``-style contrast
+(entropy expansion without U-gate), not as the full Lean ``RewardB`` theorem
+family, until a U-gate is wired here.
 """
 
 from __future__ import annotations
@@ -10,6 +18,9 @@ from typing import List, Protocol
 
 import torch
 import torch.nn.functional as F
+
+# Explicit audit flag for validation task F0.3 / V reports.
+R_B_FEASIBILITY_GATED = False
 
 
 @dataclass

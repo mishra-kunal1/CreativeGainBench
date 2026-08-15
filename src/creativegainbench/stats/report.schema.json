@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://creativegainbench.local/schemas/stats-report.json",
+  "title": "CreativeGainBench ComparisonReport",
+  "description": "Shape produced by ComparisonReport.rows() / report_to_dict(). One row per (metric × measure × optional model).",
+  "type": "object",
+  "required": ["metric", "framework", "results"],
+  "additionalProperties": false,
+  "properties": {
+    "metric": { "type": "string" },
+    "framework": { "type": "string" },
+    "model": {
+      "description": "Optional model-arm label when dumping multi-model reports.",
+      "type": ["string", "null"]
+    },
+    "results": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/resultRow" }
+    }
+  },
+  "$defs": {
+    "verdict": {
+      "type": "string",
+      "enum": [
+        "equivalent",
+        "different",
+        "trivially_diff",
+        "indeterminate"
+      ]
+    },
+    "resultRow": {
+      "type": "object",
+      "required": [
+        "metric",
+        "framework",
+        "measure",
+        "estimate",
+        "ci_low",
+        "ci_high",
+        "ci_level",
+        "margin",
+        "verdict"
+      ],
+      "properties": {
+        "metric": { "type": "string" },
+        "framework": { "type": "string" },
+        "model": { "type": ["string", "null"] },
+        "measure": {
+          "type": "string",
+          "description": "StatisticalMeasure.name (e.g. energy_distance, krippendorff_alpha, crps, pit_uniformity)."
+        },
+        "estimate": { "type": "number" },
+        "ci_low": { "type": "number" },
+        "ci_high": { "type": "number" },
+        "ci_level": { "type": "number", "minimum": 0, "maximum": 1 },
+        "margin": { "type": "number" },
+        "p_value": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "verdict": { "$ref": "#/$defs/verdict" },
+        "p_adj_by": {
+          "description": "Benjamini–Yekutieli adjusted p; null for agreement-only rows.",
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "reliability_level": {
+          "type": "string",
+          "enum": ["nominal", "ordinal", "interval"]
+        },
+        "n_items": { "type": "integer", "minimum": 0 },
+        "n_raters": { "type": "integer", "minimum": 0 },
+        "n_draws": { "type": "integer", "minimum": 0 },
+        "pit_mad": { "type": "number", "minimum": 0 },
+        "pit_histogram": {
+          "type": "array",
+          "items": { "type": "integer", "minimum": 0 }
+        },
+        "pit_bin_edges": {
+          "type": "array",
+          "items": { "type": "number" },
+          "minItems": 2
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}

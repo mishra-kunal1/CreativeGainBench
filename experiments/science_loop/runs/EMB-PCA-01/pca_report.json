@@ -1,0 +1,63 @@
+{
+  "id": "EMB-PCA-01",
+  "generated_at": "2026-08-13T20:01:04.164120+00:00",
+  "model": "gemma2:2b",
+  "embedding": "mean_pool_idea_embeddings (MiniLM + poetry boundary)",
+  "length_protocol": "F10 per-domain eval median clip (same as 03_score_rd)",
+  "n_pairs": 400,
+  "embedding_dim": 384,
+  "pca_explained_variance_ratio": [
+    0.13510500071685574,
+    0.06801433414306474,
+    0.051544256751786414
+  ],
+  "pca_cumulative_variance": [
+    0.13510500071685574,
+    0.20311933485992048,
+    0.2546635916117069
+  ],
+  "silhouette_pca2": 0.393671845998648,
+  "centroid_full_space": {
+    "centroid_distance": 0.19275709565041138,
+    "mean_within_human": 0.30207069504818856,
+    "mean_within_llm": 0.27021560618322743,
+    "separation_ratio": 0.6736386848178846
+  },
+  "centroid_pca2": {
+    "centroid_distance": 0.18828815279037367,
+    "mean_within_human": 0.0908362441902961,
+    "mean_within_llm": 0.09356292965476504,
+    "separation_ratio": 2.0421800040013216
+  },
+  "linear_probe_full_space": {
+    "method": "sklearn_logreg",
+    "cv_accuracy_mean": 0.9862500000000001,
+    "cv_accuracy_std": 0.009185586535436937,
+    "folds": 5,
+    "chance": 0.5
+  },
+  "linear_probe_pca3": {
+    "method": "sklearn_logreg",
+    "cv_accuracy_mean": 0.9625,
+    "cv_accuracy_std": 0.008838834764831844,
+    "folds": 5,
+    "chance": 0.5
+  },
+  "paired_cosine_human_llm": {
+    "mean": 0.6812490959157406,
+    "std": 0.09992739808797776,
+    "median": 0.7052302608136092
+  },
+  "paired_delta_l2": {
+    "mean": 0.41545698227680883,
+    "std": 0.092225328311073,
+    "median": 0.3952658708901631
+  },
+  "interpretation_guide": {
+    "cv_acc_near_0.5": "embeddings do not linearly separate human vs llm",
+    "cv_acc_ge_0.7": "substantial linear class signal in embedding space",
+    "silhouette_le_0": "overlapping clouds in PCA plane",
+    "separation_ratio": "centroid distance / mean within-class radius"
+  },
+  "scatter_plot": "pca_scatter.png"
+}

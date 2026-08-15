@@ -1,22 +1,38 @@
 """
-G_k interaction gain: joint downstream entropy minus max single-agent entropy.
+G_k interaction gain: joint entropy minus max single-agent entropy.
 
-Aligned with Lean `kInteractionGain`. Entropy can be supplied directly or
-estimated via soft clustering over the frozen idea codebook.
+Two estimators (F8 / V8):
+
+* ``compute_interaction_gain`` / ``mas_outputs_from_row`` —
+  **G_k_surface**: soft-cluster entropy of the raw agent/joint *texts*
+  (or a length proxy). This is a diversity proxy, **not** Lean-certified
+  irreducibility under receiver calibration.
+
+* ``compute_interaction_gain_conditioned`` —
+  entropy of *downstream-conditioned* receiver samples given each text,
+  matching R_B's sampler. Closer to Lean MASBridge / kInteractionGain
+  semantics; requires a ReceiverAgent + task battery.
 """
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Sequence
 
-import math
 import torch
 import torch.nn as nn
 
 from creativegainbench.ideas.idea_extractor import IdeaBoundaryDetector
 from creativegainbench.ideas.idea_ngram import mean_pool_idea_embeddings
-from creativegainbench.metrics.receiver_expansion import soft_cluster_entropy
+from creativegainbench.metrics.receiver_expansion import (
+    ReceiverAgent,
+    soft_cluster_entropy,
+)
+
+# Explicit labels for reporting / validation (F8).
+G_K_SURFACE = "G_k_surface"
+G_K_CONDITIONED = "G_k_conditioned"
 
 
 @dataclass
@@ -61,7 +77,7 @@ def mas_outputs_from_row(
     boundary_detector: IdeaBoundaryDetector | None = None,
     boundary_threshold: float = 0.5,
 ) -> MASOutputs | None:
-    """Build MASOutputs from mas_infer JSONL row."""
+    """Build MASOutputs with G_k_surface entropies from raw texts."""
     agents = row.get("agent_texts")
     joint = row.get("joint_text")
     if not agents or not joint:
@@ -95,7 +111,7 @@ def mas_outputs_from_row(
 
 def compute_interaction_gain(mas: MASOutputs | None) -> float:
     """
-    G_k = H_joint - max_i H_i  (clipped at 0).
+    G_k_surface = max(0, H_joint - max_i H_i) on raw-text entropies.
 
     Returns 0.0 when mas is None (single-agent mode).
     """
@@ -109,6 +125,76 @@ def compute_interaction_gain(mas: MASOutputs | None) -> float:
         agent_h = [_length_entropy_proxy(t) for t in mas.agent_texts]
         joint_h = _length_entropy_proxy(mas.joint_text)
 
+    if not agent_h:
+        return 0.0
+    return float(max(0.0, joint_h - max(agent_h)))
+
+
+def _downstream_entropy(
+    y: str,
+    *,
+    receiver_agent: ReceiverAgent,
+    task_battery: list[dict],
+    centroids: torch.Tensor,
+    n_samples: int,
+    temperature: float,
+    device: str,
+) -> float:
+    if not task_battery:
+        return 0.0
+    entropies: list[float] = []
+    for q in task_battery:
+        conditioned = receiver_agent.condition(q["input"], context=y)
+        _samples, embeddings = receiver_agent.sample_with_embeddings(
+            conditioned, n=n_samples
+        )
+        entropies.append(
+            soft_cluster_entropy(
+                embeddings.to(device),
+                centroids.to(device),
+                temperature=temperature,
+            )
+        )
+    return float(sum(entropies) / len(entropies))
+
+
+def compute_interaction_gain_conditioned(
+    mas: MASOutputs | None,
+    *,
+    receiver_agent: ReceiverAgent,
+    task_battery: list[dict],
+    idea_codebook_centroids: torch.Tensor,
+    n_samples: int,
+    temperature: float = 1.0,
+    device: str = "cpu",
+) -> float:
+    """
+    G_k_conditioned: same H_joint - max H_i shape, but H is the entropy of
+    receiver samples conditioned on each agent/joint text (R_B-style).
+    """
+    if mas is None or not mas.agent_texts:
+        return 0.0
+    agent_h = [
+        _downstream_entropy(
+            t,
+            receiver_agent=receiver_agent,
+            task_battery=task_battery,
+            centroids=idea_codebook_centroids,
+            n_samples=n_samples,
+            temperature=temperature,
+            device=device,
+        )
+        for t in mas.agent_texts
+    ]
+    joint_h = _downstream_entropy(
+        mas.joint_text,
+        receiver_agent=receiver_agent,
+        task_battery=task_battery,
+        centroids=idea_codebook_centroids,
+        n_samples=n_samples,
+        temperature=temperature,
+        device=device,
+    )
     if not agent_h:
         return 0.0
     return float(max(0.0, joint_h - max(agent_h)))

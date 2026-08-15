@@ -1,0 +1,77 @@
+name: Update all-prs-merged branch
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, closed]
+  workflow_dispatch:
+  schedule:
+    - cron: "0 * * * *" # every hour, keeps branch fresh
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  rebuild-integration-branch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository (default branch)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Rebuild integration branch from main and merge all open PR heads
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INTEGRATION_BRANCH: all-prs-merged
+          BASE_BRANCH: main
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          git fetch origin --prune
+
+          # Ensure local BASE_BRANCH points to remote
+          git checkout -B "$BASE_BRANCH" "origin/$BASE_BRANCH"
+
+          # Recreate integration branch from BASE_BRANCH each run (clean + deterministic)
+          git checkout -B "$INTEGRATION_BRANCH" "$BASE_BRANCH"
+
+          # Get all open PR numbers
+          prs=$(gh pr list --repo "$REPO" --state open --json number --jq '.[].number')
+
+          if [ -z "${prs:-}" ]; then
+            echo "No open PRs to merge."
+          else
+            failed=0
+            for pr in $prs; do
+              echo "---- Merging PR #$pr ----"
+              # Fetch PR head into a local ref
+              git fetch origin "pull/$pr/head:pr-$pr"
+
+              # Try merge; if conflict, abort and continue
+              if git merge --no-ff --no-edit "pr-$pr"; then
+                echo "Merged PR #$pr successfully."
+              else
+                echo "::warning::Conflict while merging PR #$pr. Skipping."
+                git merge --abort || true
+                failed=1
+              fi
+            done
+
+            if [ "$failed" -eq 1 ]; then
+              echo "Some PRs could not be merged due to conflicts."
+            fi
+          fi
+
+          # Push branch (force because we rebuild from scratch each run)
+          git push --force-with-lease origin "$INTEGRATION_BRANCH"
+
+      - name: Summary
+        run: |
+          echo "Integration branch all-prs-merged has been refreshed."

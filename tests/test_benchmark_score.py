@@ -10,7 +10,7 @@ from creativegainbench.artifacts.prepare import prepare_artifacts
 from creativegainbench.benchmark_score import compute_r_creativity, d_gate
 from creativegainbench.ideas.artifacts import load_artifacts
 from creativegainbench.metrics.cue import CUEModel, cue_gate
-from creativegainbench.metrics.structural_novelty import structural_novelty_gate
+from creativegainbench.metrics.delta_d import d_gate as delta_d_gate
 from creativegainbench.receivers.hash_receiver import HashReceiverAgent
 
 
@@ -20,7 +20,7 @@ ARTIFACTS = Path(__file__).resolve().parents[1] / "src" / "creativegainbench" / 
 @pytest.fixture(scope="module")
 def pipeline():
     prepare_artifacts(artifacts_root=ARTIFACTS)
-    return load_artifacts(version="v1", device="cpu", artifacts_root=ARTIFACTS)
+    return load_artifacts(version="v1", device="cpu", artifacts_root=ARTIFACTS, verify_hashes=True)
 
 
 @pytest.fixture
@@ -42,14 +42,12 @@ def test_cue_gate():
 def test_d_gate():
     assert d_gate(1.0, 0.0) == 1.0
     assert d_gate(0.0, 0.0) == 0.0
-    assert structural_novelty_gate(0.5, 0.4) is True
+    assert delta_d_gate(0.5, 0.4) == 1.0
 
 
 def test_cue_gate_closes_score(pipeline, receiver):
     y = "A creative restructuring of the scientific method for urban bees."
-    # Explicit nonpositive CUE via zero brier delta.
     cue_model = CUEModel(brier_delta=0.0, bit_length=64.0)
-    # compute_cue = 0 → gate closed
     result = compute_r_creativity(
         y,
         pipeline=pipeline,
@@ -63,9 +61,10 @@ def test_cue_gate_closes_score(pipeline, receiver):
 
 
 def test_stub_cue_opens_gate(pipeline, receiver):
+    # ≥2 non-blank lines so F0.1 feasibility_bit opens the D-gate.
     y = (
         "We restructure the probe space by introducing a new clustering of "
-        "idea units that changes compression of held-out scientific claims. "
+        "idea units that changes compression of held-out scientific claims.\n"
         "First, segment propositions. Second, quantize. Third, condition."
     )
     result = compute_r_creativity(

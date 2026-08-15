@@ -1,0 +1,57 @@
+# Creativity stats defaults — override per study / metric.
+# Margins are on each StatisticalMeasure's own scale (see METRICS.md / SPEC.md).
+# null margin => use measure.default_margin(sample).
+
+alpha: 0.05
+n_boot: 2000
+n_perm: 2000
+ci_level: 0.95
+correction: by   # Benjamini–Yekutieli FDR
+
+# Global measure margins (placeholders matching default_margin conventions)
+margins:
+  energy_distance: null          # default: 0.2 * pooled_sd
+  log_var_ratio: 0.405465108108  # log(1.5) ≈ 0.405465
+  hedges_g: 0.2                  # Cohen "small"
+  lins_ccc: 0.80                 # substantial agreement gamma
+  krippendorff_alpha: 0.80       # substantial reliability gamma
+  crps: null                     # default: 0.2 * sd(human)
+  pit_uniformity: null           # default: 1.36 / sqrt(n)
+
+# Reliability gate
+reliability:
+  level: interval                # nominal | ordinal | interval
+  # ICC(2,k) noted in SPEC as optional continuous alternative (not implemented)
+
+# Calibration
+calibration:
+  predictive_convention: draws_matrix   # (n_items, n_draws); obs = human
+  pit_n_bins: 10
+
+# Per-metric overrides (stubs — fill when wiring CreativityMetric registry)
+metrics:
+  cue:
+    framework: null
+    level: continuous
+    bounds: [0.0, null]
+    margins: {}
+  structural_novelty:
+    framework: null
+    level: continuous
+    bounds: [null, null]
+    margins: {}
+  receiver_expansion:
+    framework: null
+    level: continuous
+    bounds: [0.0, 1.0]
+    margins: {}
+  interaction_gain:
+    framework: null
+    level: continuous
+    bounds: [null, null]
+    margins: {}
+  trajectory_step_cue:
+    framework: null
+    level: continuous
+    bounds: [null, null]
+    margins: {}
