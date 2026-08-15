@@ -1,20 +1,24 @@
 """
-Proposer-Critic-Verifier multi-agent generation for G_k.
+Proposer-Critic-Verifier multi-agent generation with Edge-CUE instrumentation.
 
-Fixed 3-role triad (not a generic k-agent config): each role is asked to
-solve the task alone first (-> agent_texts, the "could one agent alone have
-done this" baseline), then the roles interact (Proposer drafts -> Critic
-critiques -> Proposer revises -> Verifier checks, bounded by
---max-revision-rounds) to produce joint_text. Full transcript is recorded
-for future trajectory-metric work (not computed in this pass).
+Fixed 3-role triad: each role solves the task alone first (-> agent_texts),
+then roles interact (Proposer drafts -> Critic critiques -> Proposer revises
+-> Verifier checks) to produce joint_text.
 
-The Verifier is an LLM playing a checking role in ALL three domains,
-including mathematical_proof -- it is NOT a real Lean 4 type-checker. It is
-a stand-in until a hard proof oracle is wired in.
+Pre-registered handoffs (do not redefine post-hoc):
+  1. proposer_draft → critic_feedback → proposer_revision
+     (Edge-CUE: prior conditioned on draft+critique context via upstream=
+     critique? Plan: upstream=draft/critique chain — we score
+     upstream=draft, downstream=revision after critique, AND
+     upstream=critique text is part of the revision conditioning.
+     Registered edge: from draft to revision with critic as intermediary —
+     Edge-CUE(upstream=draft, downstream=revision).)
+  2. proposer_revision → verifier_decision (diagnostic only; does not gate
+     creativity score)
+  3. Ablation arm (without critic) lives in run-mas-ablation, not here.
 
-Writes JSONL consumable by benchmark_eval / mas_outputs_from_row with zero
-changes to that machinery (same agent_texts/joint_text contract as
-mas_infer.py's rows).
+When ``receiver`` is provided, Edge-CUE is computed at each registered handoff
+and stored in ``edge_cue_chain`` plus per-step transcript fields.
 """
 
 from __future__ import annotations
@@ -27,6 +31,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -34,14 +39,22 @@ from openai import OpenAI
 load_dotenv()
 
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
+DEFAULT_OLLAMA_BASE = "http://127.0.0.1:11434/v1"
 DEFAULT_MODEL = "gpt-4o"
 PROVIDER_DEFAULT_MODEL = {
     "openai": "gpt-4o",
     "gemini": "gemini-3.5-flash",
+    "ollama": "gemma2:2b",
 }
 MAX_RETRIES = 3
 RETRY_DELAY_SECONDS = 10
 ROLES = ["proposer", "critic", "verifier"]
+
+# Pre-registered Edge-CUE edges (Goodhart-resistant registry).
+REGISTERED_EDGES = (
+    "proposer_draft_to_revision",
+    "proposer_revision_to_verifier",
+)
 
 DEFAULT_GUIDANCE = {
     "proposer": "Produce a substantive, specific response to the task — avoid generic, one-size-fits-all framing.",
@@ -124,11 +137,15 @@ def _make_client(provider: str, base_url: str | None) -> OpenAI:
         if not api_key:
             raise RuntimeError("GEMINI_API_KEY required for provider=gemini")
         return OpenAI(base_url=base_url or GEMINI_BASE_URL, api_key=api_key)
-    raise ValueError(f"Unknown provider: {provider!r} (use openai|gemini)")
+    if provider == "ollama":
+        return OpenAI(
+            base_url=base_url or DEFAULT_OLLAMA_BASE,
+            api_key=os.environ.get("OLLAMA_API_KEY", "ollama"),
+        )
+    raise ValueError(f"Unknown provider: {provider!r} (use openai|gemini|ollama)")
 
 
 def _complete(client: OpenAI, model: str, prompt: str, *, temperature: float = 1.0) -> str:
-    """Single-turn completion with retry-on-429 (paid-API robustness, per llm_as_judge.py)."""
     for attempt in range(MAX_RETRIES):
         try:
             completion = client.chat.completions.create(
@@ -148,18 +165,6 @@ def _complete(client: OpenAI, model: str, prompt: str, *, temperature: float = 1
 
 
 def _parse_verifier_response(verifier_text: str) -> dict:
-    """
-    Parse the Verifier's structured JSON response (task_valid,
-    addresses_critique, unresolved_issues, verdict, reason).
-
-    `approved` requires an EXACT match on verdict == "APPROVE" (not a
-    substring check -- "NOT APPROVED" must not match) AND both task_valid
-    and addresses_critique true, so a model can't get credit for resolving
-    the critic's specific complaint while still being wrong about the task,
-    or vice versa. Malformed/unparseable/missing-field output defaults to
-    not-approved -- a deliberate safe default: it falls through to the
-    max_revision_rounds bound rather than silently approving.
-    """
     default = {
         "approved": False,
         "task_valid": False,
@@ -192,13 +197,39 @@ def _parse_verifier_response(verifier_text: str) -> dict:
 
 
 def _verifier_feedback_section(feedback: str) -> str:
-    """Folded into the next round's Critic prompt so a rejection isn't dropped."""
     if not feedback:
         return ""
     return (
         "The Verifier rejected the previous revision and flagged this as "
         f"still unresolved -- make sure your critique accounts for it:\n{feedback}\n\n"
     )
+
+
+def _edge_record(
+    *,
+    from_agent: str,
+    to_agent: str,
+    from_step: str,
+    to_step: str,
+    edge_id: str,
+    cue: float,
+    gate: float,
+    brier_delta: float,
+    bit_length: float,
+    diagnostic: bool = False,
+) -> dict[str, Any]:
+    return {
+        "edge_id": edge_id,
+        "from_agent": from_agent,
+        "to_agent": to_agent,
+        "from_step": from_step,
+        "to_step": to_step,
+        "cue": float(cue),
+        "gate": float(gate),
+        "brier_delta": float(brier_delta),
+        "bit_length": float(bit_length),
+        "diagnostic": diagnostic,
+    }
 
 
 def run_triad_for_prompt(
@@ -212,14 +243,15 @@ def run_triad_for_prompt(
     *,
     domain: str | None = None,
     max_revision_rounds: int = 1,
+    receiver: Any | None = None,
+    outcome_annotator: Any | None = None,
 ) -> dict:
     guidance = DOMAIN_GUIDANCE.get(domain, DEFAULT_GUIDANCE)
     agent_models = [proposer_model, critic_model, verifier_model]
     agent_clients = [proposer_client, critic_client, verifier_client]
     transcript: list[dict] = []
+    edge_cue_chain: list[dict] = []
 
-    # (a) Solo baselines -- neutral framing, no persona, no knowledge of the others.
-    # Each role may be backed by a different provider/model.
     agent_texts: list[str] = []
     for role, model, role_client in zip(ROLES, agent_models, agent_clients):
         text = _complete(role_client, model, SOLO_PROMPT.format(prompt=prompt))
@@ -228,7 +260,6 @@ def run_triad_for_prompt(
             {"role": role, "step": "solo", "round": None, "model": model, "content": text}
         )
 
-    # (b) Joint interaction.
     draft = _complete(
         proposer_client,
         proposer_model,
@@ -242,9 +273,6 @@ def run_triad_for_prompt(
     approved = False
     round_idx = 0
     verifier_feedback = ""
-    # round_idx counts COMPLETED rounds (1-indexed): incrementing before the
-    # round's work means max_revision_rounds is a hard cap on total rounds
-    # run, not on "extra" rounds beyond an implicit first one.
     while True:
         round_idx += 1
         critique = _complete(
@@ -261,6 +289,7 @@ def run_triad_for_prompt(
             {"role": "critic", "step": "critique", "round": round_idx, "model": critic_model, "content": critique}
         )
 
+        pre_revision = current_text
         current_text = _complete(
             proposer_client,
             proposer_model,
@@ -268,9 +297,46 @@ def run_triad_for_prompt(
                 guidance=guidance["proposer"], prompt=prompt, draft=current_text, critique=critique
             ),
         )
-        transcript.append(
-            {"role": "proposer", "step": "revision", "round": round_idx, "model": proposer_model, "content": current_text}
-        )
+        rev_entry: dict[str, Any] = {
+            "role": "proposer",
+            "step": "revision",
+            "round": round_idx,
+            "model": proposer_model,
+            "content": current_text,
+        }
+
+        if receiver is not None:
+            from creativegainbench.metrics.cue import cue_gate
+            from creativegainbench.metrics.edge_cue import compute_edge_cue
+
+            z_star = None
+            if outcome_annotator is not None:
+                z_star = int(outcome_annotator.annotate(current_text))
+            # Edge 1: draft/pre-revision → revision after critique
+            cue_val, _model, diag = compute_edge_cue(
+                pre_revision,
+                current_text,
+                receiver,
+                prompt,
+                z_star=z_star,
+            )
+            edge = _edge_record(
+                from_agent="proposer",
+                to_agent="proposer",
+                from_step="draft" if round_idx == 1 else "revision",
+                to_step="revision",
+                edge_id="proposer_draft_to_revision",
+                cue=cue_val,
+                gate=float(cue_gate(cue_val)),
+                brier_delta=diag["brier_delta"],
+                bit_length=diag["bit_length"],
+            )
+            edge["round"] = round_idx
+            edge["via_agent"] = "critic"
+            edge_cue_chain.append(edge)
+            rev_entry["edge_cue"] = edge
+
+        transcript.append(rev_entry)
 
         verdict_text = _complete(
             verifier_client,
@@ -281,21 +347,59 @@ def run_triad_for_prompt(
             temperature=0.0,
         )
         verdict = _parse_verifier_response(verdict_text)
-        transcript.append(
-            {
-                "role": "verifier",
-                "step": "verify",
-                "round": round_idx,
-                "model": verifier_model,
-                "content": verdict_text,
-                "parsed": verdict,
-            }
-        )
+        ver_entry: dict[str, Any] = {
+            "role": "verifier",
+            "step": "verify",
+            "round": round_idx,
+            "model": verifier_model,
+            "content": verdict_text,
+            "parsed": verdict,
+        }
+
+        if receiver is not None:
+            from creativegainbench.metrics.cue import cue_gate
+            from creativegainbench.metrics.edge_cue import compute_edge_cue
+
+            z_star = None
+            if outcome_annotator is not None:
+                z_star = int(outcome_annotator.annotate(verdict_text))
+            cue_val, _model, diag = compute_edge_cue(
+                current_text,
+                verdict_text,
+                receiver,
+                prompt,
+                z_star=z_star,
+            )
+            edge = _edge_record(
+                from_agent="proposer",
+                to_agent="verifier",
+                from_step="revision",
+                to_step="verify",
+                edge_id="proposer_revision_to_verifier",
+                cue=cue_val,
+                gate=float(cue_gate(cue_val)),
+                brier_delta=diag["brier_delta"],
+                bit_length=diag["bit_length"],
+                diagnostic=True,
+            )
+            edge["round"] = round_idx
+            edge_cue_chain.append(edge)
+            ver_entry["edge_cue"] = edge
+
+        transcript.append(ver_entry)
         approved = verdict["approved"]
 
         if approved or round_idx >= max_revision_rounds:
             break
         verifier_feedback = "; ".join(verdict["unresolved_issues"]) or verdict["reason"]
+
+    handoff = None
+    if edge_cue_chain:
+        from creativegainbench.metrics.edge_cue import handoff_gain_rate
+
+        # HandoffGain uses creativity-relevant edges only (exclude diagnostic verifier).
+        scored = [e for e in edge_cue_chain if not e.get("diagnostic")]
+        handoff = handoff_gain_rate(scored if scored else edge_cue_chain)
 
     return {
         "prompt": prompt,
@@ -305,6 +409,8 @@ def run_triad_for_prompt(
         "roles": ROLES,
         "joint_text": current_text,
         "transcript": transcript,
+        "edge_cue_chain": edge_cue_chain,
+        "handoff_gain_rate": handoff,
         "responses": [{"response-0": current_text}],
         "verified": approved,
         "revision_rounds": round_idx,
@@ -323,14 +429,9 @@ def run_triad_batch_streaming(
     verifier_model: str,
     max_revision_rounds: int,
     workers: int,
+    receiver: Any | None = None,
+    outcome_annotator: Any | None = None,
 ) -> int:
-    """
-    Runs the triad over records in parallel, writing each row to out_f as
-    soon as it completes and skipping (logs, doesn't raise) a record whose
-    triad run raises -- a single bad row (context overflow, content-policy
-    hard reject) shouldn't discard the spend already made on the rest of a
-    paid-API batch.
-    """
     workers = max(1, min(workers, len(records)))
     n_written = 0
 
@@ -345,6 +446,8 @@ def run_triad_batch_streaming(
             verifier_model,
             domain=record.get("domain"),
             max_revision_rounds=max_revision_rounds,
+            receiver=receiver,
+            outcome_annotator=outcome_annotator,
         )
 
     with ThreadPoolExecutor(max_workers=workers) as executor:
@@ -363,50 +466,44 @@ def run_triad_batch_streaming(
 
 
 def main() -> None:
-    provider_choices = ["openai", "gemini"]
-    parser = argparse.ArgumentParser(description="Proposer-Critic-Verifier multi-agent generation for G_k")
+    provider_choices = ["openai", "gemini", "ollama"]
+    parser = argparse.ArgumentParser(description="Proposer-Critic-Verifier multi-agent generation")
     parser.add_argument("--data", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, default=Path("data/results"))
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--provider", choices=provider_choices, default="openai")
-    parser.add_argument(
-        "--proposer-provider", choices=provider_choices, default=None, help="Overrides --provider for the Proposer"
-    )
-    parser.add_argument(
-        "--critic-provider", choices=provider_choices, default=None, help="Overrides --provider for the Critic"
-    )
-    parser.add_argument(
-        "--verifier-provider", choices=provider_choices, default=None, help="Overrides --provider for the Verifier"
-    )
-    parser.add_argument(
-        "--model", type=str, default=DEFAULT_MODEL, help="Default model for all three roles unless overridden"
-    )
+    parser.add_argument("--proposer-provider", choices=provider_choices, default=None)
+    parser.add_argument("--critic-provider", choices=provider_choices, default=None)
+    parser.add_argument("--verifier-provider", choices=provider_choices, default=None)
+    parser.add_argument("--model", type=str, default=DEFAULT_MODEL)
     parser.add_argument("--proposer-model", type=str, default=None)
     parser.add_argument("--critic-model", type=str, default=None)
     parser.add_argument("--verifier-model", type=str, default=None)
     parser.add_argument("--base-url", type=str, default=None)
+    parser.add_argument("--max-revision-rounds", type=int, default=1)
+    parser.add_argument("--workers", type=int, default=None)
     parser.add_argument(
-        "--max-revision-rounds",
-        type=int,
-        default=1,
-        help="Hard cap on critique->revise->verify rounds run per prompt, win or lose (e.g. 1 = exactly one round)",
+        "--score-edge-cue",
+        action="store_true",
+        help="Compute Edge-CUE at registered handoffs during generation",
     )
-    parser.add_argument("--workers", type=int, default=8)
+    parser.add_argument("--cue-provider", choices=["ollama", "openai"], default="ollama")
+    parser.add_argument("--cue-model", type=str, default="gemma2:2b")
     args = parser.parse_args()
 
     proposer_provider = args.proposer_provider or args.provider
     critic_provider = args.critic_provider or args.provider
     verifier_provider = args.verifier_provider or args.provider
 
+    if args.workers is None:
+        role_providers = {proposer_provider, critic_provider, verifier_provider}
+        args.workers = 2 if "ollama" in role_providers else 8
+
     def _role_model(explicit: str | None, role_provider: str) -> str:
         if explicit:
             return explicit
         if role_provider == args.provider:
             return args.model
-        # Role provider differs from the base provider with no explicit
-        # override -- args.model is very likely the wrong provider's model
-        # name (e.g. "gpt-4o-mini" passed to Gemini), so fall back to that
-        # provider's own default instead of forwarding a mismatched name.
         return PROVIDER_DEFAULT_MODEL[role_provider]
 
     proposer_model = _role_model(args.proposer_model, proposer_provider)
@@ -424,6 +521,14 @@ def main() -> None:
     critic_client = _client_for(critic_provider)
     verifier_client = _client_for(verifier_provider)
 
+    receiver = None
+    if args.score_edge_cue:
+        from creativegainbench.metrics.cue_receiver import CUEBeliefConfig, CUEBeliefReceiver
+
+        receiver = CUEBeliefReceiver(
+            CUEBeliefConfig(provider=args.cue_provider, model=args.cue_model)
+        )
+
     with open(args.data) as f:
         records = [json.loads(line) for line in f if line.strip()]
     if args.limit:
@@ -434,7 +539,8 @@ def main() -> None:
         f"(proposer={proposer_provider}/{proposer_model}, "
         f"critic={critic_provider}/{critic_model}, "
         f"verifier={verifier_provider}/{verifier_model}, "
-        f"max_revision_rounds={args.max_revision_rounds}, workers={args.workers})"
+        f"max_revision_rounds={args.max_revision_rounds}, workers={args.workers}, "
+        f"score_edge_cue={args.score_edge_cue})"
     )
 
     def _safe(m: str) -> str:
@@ -458,6 +564,7 @@ def main() -> None:
             verifier_model=verifier_model,
             max_revision_rounds=args.max_revision_rounds,
             workers=args.workers,
+            receiver=receiver,
         )
 
     print(f"Wrote {n_written} triad items to {out_path}")

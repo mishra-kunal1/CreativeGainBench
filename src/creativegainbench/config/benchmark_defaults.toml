@@ -5,8 +5,8 @@ alpha = 1.0
 # Single-agent default; MAS rows use lambda_g_mas when lambda_g is 0.
 lambda_g = 0.0
 lambda_g_mas = 1.0
-# Overridden by artifacts/delta_d_v1.json when present.
-delta_d = 0.0
+# Per-domain thresholds live in artifacts/delta_d_thresholds.json
+# (negative-bank Q_0.95). No scalar delta_d.
 
 [ideas]
 n = 3
@@ -16,7 +16,7 @@ span_encoder_model = "sentence-transformers/all-MiniLM-L6-v2"
 embedding_dim = 384
 boundary_threshold = 0.5
 
-[kenlm]
+[count_ngram]
 order = 3
 
 [receiver_expansion]

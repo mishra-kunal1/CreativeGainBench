@@ -1,0 +1,386 @@
+{
+  "0": {
+    "delta_d_95": 0.0001454332418779479,
+    "n_neg": 90,
+    "quantile": 0.95,
+    "by_type": {
+      "exact_h_member": {
+        "n": 30,
+        "mean": -0.0003359145218163656,
+        "pass_rate_at_thr": 0.0
+      },
+      "pad": {
+        "n": 30,
+        "mean": -0.00039265071431749505,
+        "pass_rate_at_thr": 0.03333333333333333
+      },
+      "shuffle": {
+        "n": 30,
+        "mean": -6.208409967936656e-05,
+        "pass_rate_at_thr": 0.13333333333333333
+      },
+      "probe_paraphrase": {
+        "n": 18,
+        "mean": 0.03848106214750069,
+        "pass_rate_at_thr": 1.0
+      },
+      "ood": {
+        "n": 30,
+        "mean": 7.678555347925045e-05,
+        "pass_rate_at_thr": 0.26666666666666666
+      }
+    }
+  },
+  "1": {
+    "delta_d_95": 0.00032461030250710023,
+    "n_neg": 90,
+    "quantile": 0.95,
+    "by_type": {
+      "exact_h_member": {
+        "n": 30,
+        "mean": -0.0005025678245511291,
+        "pass_rate_at_thr": 0.0
+      },
+      "pad": {
+        "n": 30,
+        "mean": -0.0006964785059805975,
+        "pass_rate_at_thr": 0.0
+      },
+      "shuffle": {
+        "n": 30,
+        "mean": 5.3991256194835405e-05,
+        "pass_rate_at_thr": 0.16666666666666666
+      },
+      "probe_paraphrase": {
+        "n": 18,
+        "mean": 0.052861296188046275,
+        "pass_rate_at_thr": 1.0
+      },
+      "ood": {
+        "n": 30,
+        "mean": 1.1675537780050595e-05,
+        "pass_rate_at_thr": 0.1
+      }
+    }
+  },
+  "2": {
+    "delta_d_95": 0.0005573029910252012,
+    "n_neg": 90,
+    "quantile": 0.95,
+    "by_type": {
+      "exact_h_member": {
+        "n": 30,
+        "mean": -0.0008326376689163107,
+        "pass_rate_at_thr": 0.0
+      },
+      "pad": {
+        "n": 30,
+        "mean": -0.0007706534314997874,
+        "pass_rate_at_thr": 0.03333333333333333
+      },
+      "shuffle": {
+        "n": 30,
+        "mean": 0.00021846478008414363,
+        "pass_rate_at_thr": 0.13333333333333333
+      },
+      "probe_paraphrase": {
+        "n": 18,
+        "mean": 0.050313241986585766,
+        "pass_rate_at_thr": 1.0
+      },
+      "ood": {
+        "n": 30,
+        "mean": 0.0009192898229284484,
+        "pass_rate_at_thr": 0.4
+      }
+    }
+  },
+  "3": {
+    "delta_d_95": 0.0011594114202296724,
+    "n_neg": 90,
+    "quantile": 0.95,
+    "by_type": {
+      "exact_h_member": {
+        "n": 30,
+        "mean": -0.0007543812683409788,
+        "pass_rate_at_thr": 0.0
+      },
+      "pad": {
+        "n": 30,
+        "mean": -0.0013038447211453322,
+        "pass_rate_at_thr": 0.0
+      },
+      "shuffle": {
+        "n": 30,
+        "mean": 0.0006789101502200071,
+        "pass_rate_at_thr": 0.16666666666666666
+      },
+      "probe_paraphrase": {
+        "n": 18,
+        "mean": 0.05230773466592224,
+        "pass_rate_at_thr": 1.0
+      },
+      "ood": {
+        "n": 30,
+        "mean": 0.003226843809344213,
+        "pass_rate_at_thr": 0.5666666666666667
+      }
+    }
+  },
+  "4": {
+    "delta_d_95": 0.000451442599812484,
+    "n_neg": 90,
+    "quantile": 0.95,
+    "by_type": {
+      "exact_h_member": {
+        "n": 30,
+        "mean": -0.0008683386487458992,
+        "pass_rate_at_thr": 0.03333333333333333
+      },
+      "pad": {
+        "n": 30,
+        "mean": -0.0009700801691182613,
+        "pass_rate_at_thr": 0.0
+      },
+      "shuffle": {
+        "n": 30,
+        "mean": -0.0001758441273664861,
+        "pass_rate_at_thr": 0.13333333333333333
+      },
+      "probe_paraphrase": {
+        "n": 17,
+        "mean": 0.05414034330271713,
+        "pass_rate_at_thr": 1.0
+      },
+      "ood": {
+        "n": 30,
+        "mean": 0.0037448296350824457,
+        "pass_rate_at_thr": 0.8
+      }
+    }
+  },
+  "5": {
+    "delta_d_95": 0.0002597800671820101,
+    "n_neg": 90,
+    "quantile": 0.95,
+    "by_type": {
+      "exact_h_member": {
+        "n": 30,
+        "mean": -0.00039104738437889525,
+        "pass_rate_at_thr": 0.0
+      },
+      "pad": {
+        "n": 30,
+        "mean": -0.0007267600258721138,
+        "pass_rate_at_thr": 0.0
+      },
+      "shuffle": {
+        "n": 30,
+        "mean": 2.8372478218090008e-05,
+        "pass_rate_at_thr": 0.13333333333333333
+      },
+      "probe_paraphrase": {
+        "n": 18,
+        "mean": 0.03319322367692952,
+        "pass_rate_at_thr": 1.0
+      },
+      "ood": {
+        "n": 30,
+        "mean": 0.00013746440778561163,
+        "pass_rate_at_thr": 0.16666666666666666
+      }
+    }
+  },
+  "6": {
+    "delta_d_95": 0.00039090522710024517,
+    "n_neg": 90,
+    "quantile": 0.95,
+    "by_type": {
+      "exact_h_member": {
+        "n": 30,
+        "mean": -0.00044243485753069864,
+        "pass_rate_at_thr": 0.0
+      },
+      "pad": {
+        "n": 30,
+        "mean": -0.0006219914593421184,
+        "pass_rate_at_thr": 0.0
+      },
+      "shuffle": {
+        "n": 30,
+        "mean": 1.6190919642657344e-05,
+        "pass_rate_at_thr": 0.13333333333333333
+      },
+      "probe_paraphrase": {
+        "n": 18,
+        "mean": 0.05737221343443344,
+        "pass_rate_at_thr": 1.0
+      },
+      "ood": {
+        "n": 30,
+        "mean": 0.00032798470502919325,
+        "pass_rate_at_thr": 0.16666666666666666
+      }
+    }
+  },
+  "7": {
+    "delta_d_95": 0.0017978611603804812,
+    "n_neg": 90,
+    "quantile": 0.95,
+    "by_type": {
+      "exact_h_member": {
+        "n": 30,
+        "mean": -0.0013703049044659188,
+        "pass_rate_at_thr": 0.0
+      },
+      "pad": {
+        "n": 30,
+        "mean": -0.002937623512878308,
+        "pass_rate_at_thr": 0.0
+      },
+      "shuffle": {
+        "n": 30,
+        "mean": 0.0006191009340438647,
+        "pass_rate_at_thr": 0.16666666666666666
+      },
+      "probe_paraphrase": {
+        "n": 18,
+        "mean": 0.03225916425644458,
+        "pass_rate_at_thr": 1.0
+      },
+      "ood": {
+        "n": 30,
+        "mean": 0.001555307058490564,
+        "pass_rate_at_thr": 0.36666666666666664
+      }
+    }
+  },
+  "8": {
+    "delta_d_95": 3.401339369266997e-05,
+    "n_neg": 90,
+    "quantile": 0.95,
+    "by_type": {
+      "exact_h_member": {
+        "n": 30,
+        "mean": -0.00026364176775697405,
+        "pass_rate_at_thr": 0.03333333333333333
+      },
+      "pad": {
+        "n": 30,
+        "mean": -0.00020186955117954943,
+        "pass_rate_at_thr": 0.0
+      },
+      "shuffle": {
+        "n": 30,
+        "mean": -8.904004219518345e-05,
+        "pass_rate_at_thr": 0.13333333333333333
+      },
+      "probe_paraphrase": {
+        "n": 18,
+        "mean": 0.05481819423196729,
+        "pass_rate_at_thr": 1.0
+      },
+      "ood": {
+        "n": 30,
+        "mean": 0.00018635419035170555,
+        "pass_rate_at_thr": 0.7
+      }
+    }
+  },
+  "9": {
+    "delta_d_95": 0.0003856504495019777,
+    "n_neg": 90,
+    "quantile": 0.95,
+    "by_type": {
+      "exact_h_member": {
+        "n": 30,
+        "mean": -0.00048536934693366694,
+        "pass_rate_at_thr": 0.0
+      },
+      "pad": {
+        "n": 30,
+        "mean": -0.0008285175570138493,
+        "pass_rate_at_thr": 0.0
+      },
+      "shuffle": {
+        "n": 30,
+        "mean": 6.334179798981457e-05,
+        "pass_rate_at_thr": 0.13333333333333333
+      },
+      "probe_paraphrase": {
+        "n": 18,
+        "mean": 0.05182036739329183,
+        "pass_rate_at_thr": 1.0
+      },
+      "ood": {
+        "n": 30,
+        "mean": 0.000277525938193267,
+        "pass_rate_at_thr": 0.3
+      }
+    }
+  },
+  "10": {
+    "delta_d_95": 6.483308630180267e-05,
+    "n_neg": 90,
+    "quantile": 0.95,
+    "by_type": {
+      "exact_h_member": {
+        "n": 30,
+        "mean": -0.00027790998777147487,
+        "pass_rate_at_thr": 0.0
+      },
+      "pad": {
+        "n": 30,
+        "mean": -0.0003303430538143042,
+        "pass_rate_at_thr": 0.0
+      },
+      "shuffle": {
+        "n": 30,
+        "mean": -8.100064379592166e-05,
+        "pass_rate_at_thr": 0.16666666666666666
+      },
+      "probe_paraphrase": {
+        "n": 18,
+        "mean": 0.026357459911196365,
+        "pass_rate_at_thr": 1.0
+      },
+      "ood": {
+        "n": 30,
+        "mean": 8.716344651631857e-05,
+        "pass_rate_at_thr": 0.3333333333333333
+      }
+    }
+  },
+  "11": {
+    "delta_d_95": 0.0013488399370647733,
+    "n_neg": 90,
+    "quantile": 0.95,
+    "by_type": {
+      "exact_h_member": {
+        "n": 30,
+        "mean": -0.0006253265758994552,
+        "pass_rate_at_thr": 0.0
+      },
+      "pad": {
+        "n": 30,
+        "mean": -0.0008687862098288253,
+        "pass_rate_at_thr": 0.0
+      },
+      "shuffle": {
+        "n": 30,
+        "mean": 0.000905636015260872,
+        "pass_rate_at_thr": 0.16666666666666666
+      },
+      "probe_paraphrase": {
+        "n": 8,
+        "mean": 0.12499251562629102,
+        "pass_rate_at_thr": 1.0
+      },
+      "ood": {
+        "n": 30,
+        "mean": 0.0010533125158585913,
+        "pass_rate_at_thr": 0.3333333333333333
+      }
+    }
+  }
+}

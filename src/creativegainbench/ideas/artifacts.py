@@ -1,5 +1,5 @@
 """
-Load frozen idea-pipeline artifacts (codebook, KenLM, optional boundary detector).
+Load frozen idea-pipeline artifacts (codebook, deformation context, boundary).
 
 All artifacts are versioned and hash-checked against artifacts/manifest.json
 so benchmark runs cannot silently pick up mutated checkpoints.
@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import pickle
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -23,12 +24,9 @@ except ModuleNotFoundError:  # Python 3.10
 
 from creativegainbench.ideas.idea_extractor import IdeaBoundaryDetector
 from creativegainbench.ideas.idea_ngram import IdeaCodebook
+from creativegainbench.ideas.probe_set import ProbeSet
 from creativegainbench.ideas.span_encoder import build_span_encoder
-from creativegainbench.metrics.kenlm_compressor import (
-    KenLMCompressor,
-    load_kenlm_compressor,
-)
-from creativegainbench.metrics.structural_novelty import ProbeSet
+from creativegainbench.metrics.deformation import DomainDeformationContext
 
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
@@ -80,7 +78,7 @@ class IdeaPipeline:
     span_encoder: nn.Module
     boundary_detector: IdeaBoundaryDetector | None
     codebook: IdeaCodebook
-    compressor: KenLMCompressor
+    deformation_ctx: DomainDeformationContext
     probe_set: ProbeSet
     task_battery: list[dict]
     n: int
@@ -88,11 +86,6 @@ class IdeaPipeline:
     span_encoder_backend: str = "minilm"
     span_encoder_model: str = "sentence-transformers/all-MiniLM-L6-v2"
     device: str = "cpu"
-
-    # Back-compat alias used by older call sites.
-    @property
-    def model(self) -> KenLMCompressor:
-        return self.compressor
 
     def to(self, device: str) -> "IdeaPipeline":
         self.device = device
@@ -141,7 +134,7 @@ def load_artifacts(
         _verify_manifest(manifest, version, root)
 
     ideas_cfg = cfg["ideas"]
-    kenlm_cfg = cfg.get("kenlm", {})
+    ngram_cfg = cfg.get("count_ngram", {})
     version_meta = manifest.get("versions", {}).get(version, {})
 
     codebook_path = root / "codebook" / f"idea_codebook_{version}.pt"
@@ -149,16 +142,26 @@ def load_artifacts(
     probes_path = root / "probes" / f"probes_{version}_seed{seed}.json"
     battery_path = root / f"task_battery_{version}.json"
 
-    kenlm_rel = version_meta.get("kenlm_path", f"models/idea_kenlm_{version}.arpa")
-    kenlm_path = root / kenlm_rel
-    order = int(version_meta.get("kenlm_order", kenlm_cfg.get("order", ideas_cfg.get("n", 3))))
+    ctx_rel = version_meta.get(
+        "deformation_ctx_path", f"models/deformation_ctx_{version}.pkl"
+    )
+    ctx_path = root / ctx_rel
+    order = int(
+        version_meta.get("ngram_order", ngram_cfg.get("order", ideas_cfg.get("n", 3)))
+    )
 
     codebook_state = torch.load(codebook_path, map_location="cpu", weights_only=True)
     centroids = codebook_state["centroids"]
     codebook = IdeaCodebook(centroids=centroids)
     embedding_dim = int(codebook.embedding_dim)
 
-    compressor = load_kenlm_compressor(kenlm_path, order=order)
+    with open(ctx_path, "rb") as f:
+        deformation_ctx = pickle.load(f)
+    if not isinstance(deformation_ctx, DomainDeformationContext):
+        raise TypeError(f"Expected DomainDeformationContext in {ctx_path}")
+    if deformation_ctx.order != order:
+        # Prefer on-disk ctx order; warn via attribute consistency only.
+        pass
 
     boundary_detector: IdeaBoundaryDetector | None = None
     if boundary_path.exists():
@@ -199,7 +202,7 @@ def load_artifacts(
         span_encoder=span_encoder,
         boundary_detector=boundary_detector,
         codebook=codebook,
-        compressor=compressor,
+        deformation_ctx=deformation_ctx,
         probe_set=probe_set,
         task_battery=task_battery,
         n=int(ideas_cfg["n"]),

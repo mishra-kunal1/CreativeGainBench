@@ -60,10 +60,14 @@ def test_row_schema_and_role_ordering(monkeypatch):
         "roles",
         "joint_text",
         "transcript",
+        "edge_cue_chain",
+        "handoff_gain_rate",
         "responses",
         "verified",
         "revision_rounds",
     }
+    assert row["edge_cue_chain"] == []
+    assert row["handoff_gain_rate"] is None
     assert row["agent_models"] == ["prop-model", "crit-model", "ver-model"]
     assert row["roles"] == ["proposer", "critic", "verifier"]
     assert len(row["agent_texts"]) == 3
@@ -269,6 +273,7 @@ def test_roles_can_use_distinct_clients(monkeypatch):
     [
         ("openai", None),
         ("gemini", "generativelanguage.googleapis.com"),
+        ("ollama", "127.0.0.1:11434"),
     ],
 )
 def test_make_client_gemini_base_url(monkeypatch, provider, base_url_contains):
@@ -283,6 +288,23 @@ def test_make_client_gemini_requires_api_key(monkeypatch):
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     with pytest.raises(RuntimeError, match="GEMINI_API_KEY"):
         mas_agents._make_client("gemini", None)
+
+
+def test_make_client_ollama_needs_no_api_key(monkeypatch):
+    """Local ollama must work without any API key env vars set."""
+    monkeypatch.delenv("OLLAMA_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    client = mas_agents._make_client("ollama", None)
+    assert "127.0.0.1:11434" in str(client.base_url)
+
+
+def test_make_client_ollama_respects_base_url_override(monkeypatch):
+    client = mas_agents._make_client("ollama", "http://gpu-box:11434/v1")
+    assert "gpu-box:11434" in str(client.base_url)
+
+
+def test_provider_default_model_covers_all_providers():
+    assert set(mas_agents.PROVIDER_DEFAULT_MODEL) == {"openai", "gemini", "ollama"}
 
 
 def test_run_triad_batch_streaming_parallel_workers(monkeypatch):

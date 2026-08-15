@@ -9,7 +9,6 @@ dependencies = [
     "python-dotenv",
     "torch",
     "sentence-transformers",
-    "kenlm",
     "numpy",
     "scipy",
     "tomli; python_version < '3.11'",
@@ -27,6 +26,8 @@ calibrate-delta-d = "creativegainbench.artifacts.calibrate_delta_d:main"
 run-benchmark = "creativegainbench.eval.benchmark_eval:main"
 run-mas = "creativegainbench.eval.mas_infer:main"
 run-mas-agents = "creativegainbench.eval.mas_agents:main"
+run-mas-score = "creativegainbench.eval.mas_score:main"
+run-mas-ablation = "creativegainbench.eval.mas_ablation:main"
 run-trajectory-metrics = "creativegainbench.eval.trajectory_eval:main"
 benchmark-report = "creativegainbench.eval.report:main"
 
@@ -44,8 +45,7 @@ creativegainbench = [
     "artifacts/probes/*.json",
     "artifacts/codebook/*.pt",
     "artifacts/models/*.pt",
-    "artifacts/models/*.arpa",
-    "artifacts/models/*.klm",
+    "artifacts/models/*.pkl",
     "artifacts/manifest.json",
 ]
 
