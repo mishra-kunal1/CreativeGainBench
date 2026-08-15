@@ -19,6 +19,20 @@ boundary_threshold = 0.5
 [count_ngram]
 order = 3
 
+# R_D backend: "count_ngram" (hard VQ, default) | "soft_count" | "kernel_parzen"
+[rd]
+backend = "count_ngram"
+tau = 1.0
+
+[soft_count]
+order = 1
+tau = 1.0
+
+[kernel_parzen]
+# Bandwidth σ calibrated on negatives only (see soft_meta / kernel_meta).
+sigma = 1.0
+max_bank = 4096
+
 [receiver_expansion]
 n_samples = 4
 temperature = 1.0

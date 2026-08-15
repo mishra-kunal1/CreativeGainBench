@@ -1,0 +1,218 @@
+{
+  "n_texts": 80,
+  "n_pairs": 40,
+  "model": "gemma2:2b",
+  "n_tasks": 3,
+  "n_samples": 4,
+  "correlations": {
+    "r_d_ker__r_d_hard": {
+      "spearman": 0.3587669948429442,
+      "pearson": 0.15894665189375334
+    },
+    "r_d_ker__r_b_cb": {
+      "spearman": -0.3606657290201594,
+      "pearson": -0.2478934114038293
+    },
+    "r_d_ker__r_b_cont": {
+      "spearman": 0.06912798874824191,
+      "pearson": 0.1554616309662632
+    },
+    "r_d_ker__r_creativity": {
+      "spearman": 0.49950773558368494,
+      "pearson": 0.497713784405833
+    },
+    "r_d_hard__r_b_cb": {
+      "spearman": -0.03616971401781528,
+      "pearson": 0.17576150818915498
+    },
+    "r_d_hard__r_b_cont": {
+      "spearman": -0.04603844350679794,
+      "pearson": 0.01847031685696121
+    },
+    "r_d_hard__r_creativity": {
+      "spearman": 0.2848335677449602,
+      "pearson": 0.04251563621958574
+    },
+    "r_b_cb__r_b_cont": {
+      "spearman": -0.04050632911392405,
+      "pearson": -0.11016724826137568
+    },
+    "r_b_cb__r_creativity": {
+      "spearman": -0.20897796530707924,
+      "pearson": -0.29753440068167714
+    },
+    "r_b_cont__r_creativity": {
+      "spearman": -0.05921237693389593,
+      "pearson": 0.16066046301725387
+    }
+  },
+  "separation": {
+    "r_d_ker": {
+      "auc_human_higher": 0.27625,
+      "direction": "model_higher",
+      "human_mean": 0.0001181470153978439,
+      "model_mean": 0.0002858549234342329,
+      "frac_nonzero": 1.0
+    },
+    "r_d_hard": {
+      "auc_human_higher": 0.390625,
+      "direction": "model_higher",
+      "human_mean": 0.0003190121863298859,
+      "model_mean": 0.00017437948590017684,
+      "frac_nonzero": 1.0
+    },
+    "r_b_cb": {
+      "auc_human_higher": 0.8259375,
+      "direction": "human_higher",
+      "human_mean": 0.9998749764564403,
+      "model_mean": 0.9998413837859175,
+      "frac_nonzero": 1.0
+    },
+    "r_b_cont": {
+      "auc_human_higher": 0.538125,
+      "direction": "human_higher",
+      "human_mean": 0.9999951807842618,
+      "model_mean": 0.9999950259998759,
+      "frac_nonzero": 1.0
+    },
+    "r_creativity": {
+      "auc_human_higher": 0.3865625,
+      "direction": "model_higher",
+      "human_mean": 7.1017284539854855e-06,
+      "model_mean": 4.3971430520741815e-05,
+      "frac_nonzero": 0.225
+    }
+  },
+  "verdict": {
+    "collapse_ker_vs_hard": false,
+    "collapse_ker_vs_rb_codebook": false,
+    "rb_codebook_equals_continuous": false,
+    "ker_tracks_continuous_rb": false,
+    "note": "collapse := |Spearman|\u22650.7. If ker\u2262hard and ker\u2262r_b_cb, codebook is not forcing all metrics to one signal. If r_b_cb\u2248r_b_cont, the codebook soft-cluster is redundant for R_B on this receiver."
+  },
+  "gate_open_rate_ker": 0.225,
+  "gate_open_rate_hard": 0.2875,
+  "r_creativity_nonzero_rate": 0.225,
+  "records_sample": [
+    {
+      "poem_id": "596d818f-8e9d-4b7e-b83f-ce1cf4f846d3",
+      "domain": 9,
+      "label": "human",
+      "r_d_ker": 0.00017737094681555252,
+      "r_d_ker_gate": 0.0,
+      "r_d_hard": -2.9810267864278614e-05,
+      "r_d_hard_gate": 0.0,
+      "r_b_cb": 0.9998634612625058,
+      "r_b_cont": 0.999996735077469,
+      "r_creativity": 0.0,
+      "cue": 0.0001607484184972044,
+      "d_gate": 0.0,
+      "y_n_ideas_ker": 16
+    },
+    {
+      "poem_id": "596d818f-8e9d-4b7e-b83f-ce1cf4f846d3",
+      "domain": 9,
+      "label": "llm",
+      "r_d_ker": 4.301313193622926e-05,
+      "r_d_ker_gate": 0.0,
+      "r_d_hard": -6.0569461931236225e-05,
+      "r_d_hard_gate": 0.0,
+      "r_b_cb": 0.9998847616323017,
+      "r_b_cont": 0.9999950152509604,
+      "r_creativity": 0.0,
+      "cue": 6.233337954675767e-05,
+      "d_gate": 0.0,
+      "y_n_ideas_ker": 24
+    },
+    {
+      "poem_id": "b71c7fa4-59af-4bc0-a8a1-e848c392052b",
+      "domain": 9,
+      "label": "human",
+      "r_d_ker": 0.001165012205463629,
+      "r_d_ker_gate": 1.0,
+      "r_d_hard": 0.0011001316244209911,
+      "r_d_hard_gate": 1.0,
+      "r_b_cb": 0.9999163554822379,
+      "r_b_cont": 0.9999970790427707,
+      "r_creativity": 7.165938046184166e-06,
+      "cue": 3.5831188772173675e-06,
+      "d_gate": 1.0,
+      "y_n_ideas_ker": 689
+    },
+    {
+      "poem_id": "b71c7fa4-59af-4bc0-a8a1-e848c392052b",
+      "domain": 9,
+      "label": "llm",
+      "r_d_ker": 0.0004204410756504327,
+      "r_d_ker_gate": 1.0,
+      "r_d_hard": 0.000462294514883086,
+      "r_d_hard_gate": 1.0,
+      "r_b_cb": 0.999843103612426,
+      "r_b_cont": 0.9999950152509604,
+      "r_creativity": 7.742323552453104e-05,
+      "cue": 3.871465485701214e-05,
+      "d_gate": 1.0,
+      "y_n_ideas_ker": 47
+    },
+    {
+      "poem_id": "ef85f882-bab3-4fac-a60f-b53516193d76",
+      "domain": 9,
+      "label": "human",
+      "r_d_ker": -5.2074340726048785e-05,
+      "r_d_ker_gate": 0.0,
+      "r_d_hard": 0.00010548742279717264,
+      "r_d_hard_gate": 0.0,
+      "r_b_cb": 0.9998935008988565,
+      "r_b_cont": 0.999994155337706,
+      "r_creativity": 0.0,
+      "cue": 0.00016758877673112797,
+      "d_gate": 0.0,
+      "y_n_ideas_ker": 10
+    },
+    {
+      "poem_id": "ef85f882-bab3-4fac-a60f-b53516193d76",
+      "domain": 9,
+      "label": "llm",
+      "r_d_ker": 0.00016263307596924828,
+      "r_d_ker_gate": 0.0,
+      "r_d_hard": -0.00010456438011399414,
+      "r_d_hard_gate": 0.0,
+      "r_b_cb": 0.9998328356111966,
+      "r_b_cont": 0.9999957031815637,
+      "r_creativity": 0.0,
+      "cue": 0.0002092835690096453,
+      "d_gate": 0.0,
+      "y_n_ideas_ker": 10
+    },
+    {
+      "poem_id": "f8d01dcd-94db-4449-bf8a-6e37b802ca11",
+      "domain": 9,
+      "label": "human",
+      "r_d_ker": 0.00013988548105030863,
+      "r_d_ker_gate": 0.0,
+      "r_d_hard": 7.848030539161845e-05,
+      "r_d_hard_gate": 0.0,
+      "r_b_cb": 0.999863894403997,
+      "r_b_cont": 0.9999957031815637,
+      "r_creativity": 0.0,
+      "cue": 1.785725423948746e-05,
+      "d_gate": 0.0,
+      "y_n_ideas_ker": 117
+    },
+    {
+      "poem_id": "f8d01dcd-94db-4449-bf8a-6e37b802ca11",
+      "domain": 9,
+      "label": "llm",
+      "r_d_ker": 0.0007267310112211532,
+      "r_d_ker_gate": 1.0,
+      "r_d_hard": 0.0001548446966012332,
+      "r_d_hard_gate": 0.0,
+      "r_b_cb": 0.9998342879091373,
+      "r_b_cont": 0.9999957031815637,
+      "r_creativity": 5.839987774904467e-05,
+      "cue": 2.9202358466462137e-05,
+      "d_gate": 1.0,
+      "y_n_ideas_ker": 65
+    }
+  ]
+}

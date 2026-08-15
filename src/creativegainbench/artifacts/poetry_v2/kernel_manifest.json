@@ -1,0 +1,24 @@
+{
+  "backend": "kernel_parzen",
+  "sigma": 0.32647937536239624,
+  "max_bank": 4096,
+  "files": {
+    "kernel_meta.json": "62006e94c704695a12e892a683a180373bfb76aac17b7f949a4f7b6828a1e5cb",
+    "kernel_delta_d_thresholds.json": "5819e52c1ec5b2966cdcf187c7b0832e79e8119708aa1385596861ab10ea2ee2"
+  },
+  "local_contexts": [
+    "domain_0_kernel_ctx.pt",
+    "domain_1_kernel_ctx.pt",
+    "domain_2_kernel_ctx.pt",
+    "domain_3_kernel_ctx.pt",
+    "domain_4_kernel_ctx.pt",
+    "domain_5_kernel_ctx.pt",
+    "domain_6_kernel_ctx.pt",
+    "domain_7_kernel_ctx.pt",
+    "domain_8_kernel_ctx.pt",
+    "domain_9_kernel_ctx.pt",
+    "domain_10_kernel_ctx.pt",
+    "domain_11_kernel_ctx.pt"
+  ],
+  "note": "Rebuild domain_*_kernel_ctx.pt with scripts/build_kernel_poetry_contexts.py --device cuda"
+}

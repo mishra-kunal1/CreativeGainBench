@@ -7,6 +7,9 @@ crew (`.cursor/skills/science-in-the-loop/`).
 |------|---------|
 | `embedding_pca_latest.md` | **Stable pointer** to latest human-vs-LLM embedding PCA report |
 | `runs/EMB-PCA-01/` | PCA / linear-probe separability study (script + metrics + scatter) |
+| `runs/RD-INSPECT-01/` | Offline why hard R_D fails (paired dump scores + PCA join) |
+| `runs/RD-SOFT-01/` | Soft SoftCountLM R_D inspect (failed P1; geometry still lost) |
+| `runs/RD-KERNEL-01/` | Parzen kernel R_D — geometry link + discrimination + findings |
 | `EXPERIMENT_LOG.md` | Append-only detailed log of runs and hypotheses |
 | `snapshot_latest.md` / `.json` | Latest construct-validity / DB snapshot |
 | `runs/<hypothesis-id>/` | Per-hypothesis experimenter artifacts |

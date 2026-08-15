@@ -7,7 +7,9 @@ Canonical Benchmark Score / R_creativity.
 Mirrors Lean `Creativity.CUE.Rcreativity`. Both gates are multiplicative
 safety floors on the *entire* score, including λ_G · G_k.
 
-R_D is ProbeCompressor true deformation (CountNgram), never a KenLM proxy.
+R_D is ProbeCompressor true deformation (hard CountNgram by default,
+SoftCount soft-unigram when rd_backend=\"soft_count\", or Parzen kernel CE
+when rd_backend=\"kernel_parzen\"), never a KenLM proxy.
 """
 
 from __future__ import annotations
@@ -19,7 +21,13 @@ from creativegainbench.ideas.artifacts import IdeaPipeline
 from creativegainbench.ideas.idea_extractor import default_sentence_splitter
 from creativegainbench.metrics.cue import CUEModel, compute_cue, cue_gate, stub_positive_cue
 from creativegainbench.metrics.delta_d import d_gate  # re-exported for callers/tests
-from creativegainbench.metrics.deformation import compute_deformation
+from creativegainbench.metrics.deformation import (
+    KernelDomainDeformationContext,
+    SoftDomainDeformationContext,
+    compute_deformation,
+    compute_kernel_deformation,
+    compute_soft_deformation,
+)
 from creativegainbench.metrics.feasibility import feasibility_bit
 from creativegainbench.metrics.interaction_gain import (
     G_K_SURFACE,
@@ -73,6 +81,9 @@ def compute_r_creativity(
     edge_cue_chain: list | None = None,
     handoff_gain_rate: float | None = None,
     prompt: str | None = None,
+    rd_backend: str = "count_ngram",
+    soft_deformation_ctx: SoftDomainDeformationContext | None = None,
+    kernel_deformation_ctx: KernelDomainDeformationContext | None = None,
 ) -> BenchmarkResult:
     """
     Compute the gated creativity score for a single output y.
@@ -94,15 +105,50 @@ def compute_r_creativity(
     feasible = feasibility_bit(y, prompt)
 
     splitter = sentence_splitter or default_sentence_splitter
-    deform = compute_deformation(
-        y,
-        pipeline.deformation_ctx,
-        span_encoder=pipeline.span_encoder,
-        codebook=pipeline.codebook,
-        boundary_detector=pipeline.boundary_detector,
-        sentence_splitter=splitter,
-        boundary_threshold=pipeline.boundary_threshold,
-    )
+    if rd_backend == "soft_count":
+        if soft_deformation_ctx is None:
+            raise ValueError(
+                "rd_backend='soft_count' requires soft_deformation_ctx "
+                "(SoftDomainDeformationContext)."
+            )
+        deform = compute_soft_deformation(
+            y,
+            soft_deformation_ctx,
+            span_encoder=pipeline.span_encoder,
+            codebook=pipeline.codebook,
+            boundary_detector=pipeline.boundary_detector,
+            sentence_splitter=splitter,
+            boundary_threshold=pipeline.boundary_threshold,
+        )
+    elif rd_backend == "kernel_parzen":
+        if kernel_deformation_ctx is None:
+            raise ValueError(
+                "rd_backend='kernel_parzen' requires kernel_deformation_ctx "
+                "(KernelDomainDeformationContext)."
+            )
+        deform = compute_kernel_deformation(
+            y,
+            kernel_deformation_ctx,
+            span_encoder=pipeline.span_encoder,
+            boundary_detector=pipeline.boundary_detector,
+            sentence_splitter=splitter,
+            boundary_threshold=pipeline.boundary_threshold,
+        )
+    elif rd_backend == "count_ngram":
+        deform = compute_deformation(
+            y,
+            pipeline.deformation_ctx,
+            span_encoder=pipeline.span_encoder,
+            codebook=pipeline.codebook,
+            boundary_detector=pipeline.boundary_detector,
+            sentence_splitter=splitter,
+            boundary_threshold=pipeline.boundary_threshold,
+        )
+    else:
+        raise ValueError(
+            f"Unknown rd_backend={rd_backend!r} "
+            "(use count_ngram|soft_count|kernel_parzen)"
+        )
     r_d = deform.r_d_norm
 
     r_b = compute_receiver_expansion(

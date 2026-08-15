@@ -15,6 +15,15 @@ src/creativegainbench/artifacts/manifest.json
 src/creativegainbench/artifacts/delta_d_v1.json
 src/creativegainbench/artifacts/contamination_v1.json
 
+# Large regenerable poetry_v2 soft/kernel caches (build scripts recreate)
+src/creativegainbench/artifacts/poetry_v2/soft_emb_cache/
+src/creativegainbench/artifacts/poetry_v2/domain_*_soft_ctx.pt
+src/creativegainbench/artifacts/poetry_v2/domain_*_kernel_ctx.pt
+
+# Science-loop bulky regenerable dumps / logs
+experiments/science_loop/runs/*/logs/
+experiments/science_loop/runs/RD-SOFT-01/corpus_by_domain.jsonl
+
 # Lean formalization build artifacts
 math_backing/.lake/
 math_backing/docs/*.aux

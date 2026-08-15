@@ -14,6 +14,9 @@
 |----|------------|------|--------|---------|
 | E1-Gemma-Rerun | 2026-08-13 | experiment1 gemma2:2b | **done** (R_D+agg) | ΔR_D=+2.27e-05 CI includes 0; gens 1489 |
 | EMB-PCA-01 | 2026-08-13 | embedding PCA separability | **done** | CV acc=0.986; silhouette=0.394 (STRONG) |
+| RD-INSPECT-01 | 2026-08-15 | R_D human vs LLM inspection | **done** | g equivalent; SNR 0.02; PCA-3 CV 0.94 vs R_D R² 0.017 |
+| RD-SOFT-01 | 2026-08-15 | soft SoftCount R_D | **done** (P1 fail) | soft R²≈0.017; τ=0.25; no class retune |
+| RD-KERNEL-01 | 2026-08-15 | Parzen kernel R_D | **done** (P1 pass) | R²≈0.345; discriminates model_higher; see FINDINGS.md |
 | DIAG-E4-Baseline | 2026-08-13T17:39Z | E4 check | done | pooled_r=-0.0164 |
 | DIAG-E4-Variants | 2026-08-13T17:45Z | H-20260813-01 P1 | done | gemma Spearman rd↔cue≈0.068 |
 | H-20260813-01 | 2026-08-13 | hypothesis | **approved** (iter2) | CUE/R_D length-protocol alignment; Stage C after E1 R_D |
