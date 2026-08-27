@@ -179,6 +179,7 @@ class CUEBeliefReceiver:
         y: str,
         *,
         external_outcome_index: int | None = None,
+        prior: Sequence[float] | None = None,
     ) -> tuple[float, CUEModel, dict]:
         """
         CUE via Brier improvement on a realized outcome.
@@ -186,8 +187,20 @@ class CUEBeliefReceiver:
         If ``external_outcome_index`` is provided, that label is used as z*
         (math-faithful: receiver does not grade its own classification).
         Otherwise falls back to self-classification (legacy / circular).
+
+        ``prior`` may be supplied to reuse a cached P(z | q); the prior does
+        not depend on y. When omitted, the prior is elicited from the prompt.
         """
-        prior = self.elicit_prior(task_prompt)
+        prior_cached = prior is not None
+        if prior is None:
+            prior_vec = self.elicit_prior(task_prompt)
+        else:
+            prior_vec = [float(x) for x in prior]
+            if len(prior_vec) != len(self.outcomes) or sum(prior_vec) <= 0:
+                prior_vec = self._uniform()
+            else:
+                s = sum(prior_vec)
+                prior_vec = [x / s for x in prior_vec]
         posterior = self.elicit_posterior(task_prompt, y)
         if external_outcome_index is not None:
             outcome = int(external_outcome_index)
@@ -203,11 +216,11 @@ class CUEBeliefReceiver:
             outcome_source = "self_classify"
             z_star_source = "self"
         bits = max(bit_length_utf8(y), 8.0)
-        delta = brier_delta(prior, posterior, outcome)
+        delta = brier_delta(prior_vec, posterior, outcome)
         model = CUEModel(brier_delta=delta, bit_length=bits)
         cue_val = compute_cue(model)
         diag = {
-            "prior": prior,
+            "prior": prior_vec,
             "posterior": posterior,
             "outcome_index": outcome,
             "outcome_label": self.outcomes[outcome],
@@ -217,5 +230,6 @@ class CUEBeliefReceiver:
             "z_star_source": z_star_source,
             "brier_delta": float(delta),
             "bit_length": float(bits),
+            "prior_cached": prior_cached,
         }
         return cue_val, model, diag
