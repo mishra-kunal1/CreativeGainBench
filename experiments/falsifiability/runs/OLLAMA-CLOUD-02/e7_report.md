@@ -8,11 +8,11 @@ PairedMeanDiff DIFFERENT + positive estimate + BY p_adj < alpha for {cross, rand
 
 | Control | n | estimate | CI | p | p_adj BY | verdict | pass |
 |---------|---|----------|----|---|----------|---------|------|
-| cross | 24 | +2.059e-05 | [-7.166e-06, +6.958e-05] | 0.4318 | 0.7916 | indeterminate | False |
-| random | 24 | +0.0005834 | [+0.000495, +0.0006439] | 0.0004998 | 0.001374 | different | True |
-| irrelevant | 24 | +0.0006839 | [+0.0006775, +0.000696] | 0.0004998 | 0.001374 | different | True |
+| cross | 24 | +0.0002 | [+5.261e-05, +0.0004379] | 0.03398 | 0.09345 | different | False |
+| random | 24 | +0.0001784 | [+5.084e-05, +0.0004359] | 0.06497 | 0.1191 | indeterminate | False |
+| irrelevant | 24 | +0.0002777 | [+0.0001467, +0.0005141] | 0.004498 | 0.02474 | different | True |
 
-Length mean |bits_arm/bits_matched − 1| = 0.0023 (pass True, tol 0.20)
+Length mean |bits_arm/bits_matched − 1| = 0.1091 (pass True, tol 0.20)
 
 _Co-primary brier_delta contrasts are in the JSON report._
 

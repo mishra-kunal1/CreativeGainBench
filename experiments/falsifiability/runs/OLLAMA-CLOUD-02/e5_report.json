@@ -9,13 +9,19 @@
       "gpt-oss:20b",
       "nemotron-3-nano:30b"
     ],
+    "receivers_all": [
+      "gemma4:31b",
+      "gpt-oss:20b",
+      "nemotron-3-nano:30b"
+    ],
+    "cue_inert": [],
     "pairs": {
       "gemma4:31b vs gpt-oss:20b": {
         "spearman_rho": {
           "measure": "spearman_rho",
-          "estimate": NaN,
-          "ci_low": NaN,
-          "ci_high": NaN,
+          "estimate": 0.87992618004209,
+          "ci_low": 0.6535438908079985,
+          "ci_high": 0.9772482025506058,
           "ci_level": 0.95,
           "margin": 0.8,
           "p_value": null,
@@ -23,13 +29,13 @@
         },
         "lins_ccc": {
           "measure": "lins_ccc",
-          "estimate": 0.0,
-          "ci_low": 0.0,
-          "ci_high": 0.0,
+          "estimate": 0.9039610518269733,
+          "ci_low": 0.6776296027759435,
+          "ci_high": 0.9653197580419576,
           "ci_level": 0.95,
           "margin": 0.8,
           "p_value": null,
-          "verdict": "different"
+          "verdict": "indeterminate"
         },
         "passed": false,
         "pass_rule": "both BCa CI lowers > 0.80",
@@ -39,23 +45,23 @@
       "gemma4:31b vs nemotron-3-nano:30b": {
         "spearman_rho": {
           "measure": "spearman_rho",
-          "estimate": 0.10067017311947343,
-          "ci_low": -0.2930759150792162,
-          "ci_high": 0.48345322347222214,
+          "estimate": 0.7668116586540459,
+          "ci_low": 0.3821674226045899,
+          "ci_high": 0.9016576926170298,
           "ci_level": 0.95,
           "margin": 0.8,
           "p_value": null,
-          "verdict": "different"
+          "verdict": "indeterminate"
         },
         "lins_ccc": {
           "measure": "lins_ccc",
-          "estimate": -0.008970396540474445,
-          "ci_low": -0.08010807893157317,
-          "ci_high": 0.0029658010904032857,
+          "estimate": 0.9159660265241228,
+          "ci_low": 0.7292514343426315,
+          "ci_high": 0.9705106138378288,
           "ci_level": 0.95,
           "margin": 0.8,
           "p_value": null,
-          "verdict": "different"
+          "verdict": "indeterminate"
         },
         "passed": false,
         "pass_rule": "both BCa CI lowers > 0.80",
@@ -65,9 +71,9 @@
       "gpt-oss:20b vs nemotron-3-nano:30b": {
         "spearman_rho": {
           "measure": "spearman_rho",
-          "estimate": NaN,
-          "ci_low": NaN,
-          "ci_high": NaN,
+          "estimate": 0.7885590293476283,
+          "ci_low": 0.5806141104924957,
+          "ci_high": 0.9156069384684922,
           "ci_level": 0.95,
           "margin": 0.8,
           "p_value": null,
@@ -75,13 +81,13 @@
         },
         "lins_ccc": {
           "measure": "lins_ccc",
-          "estimate": 0.0,
-          "ci_low": 0.0,
-          "ci_high": 0.0,
+          "estimate": 0.8646700769040122,
+          "ci_low": 0.6222953823776591,
+          "ci_high": 0.9450546283068387,
           "ci_level": 0.95,
           "margin": 0.8,
           "p_value": null,
-          "verdict": "different"
+          "verdict": "indeterminate"
         },
         "passed": false,
         "pass_rule": "both BCa CI lowers > 0.80",
@@ -91,36 +97,36 @@
     },
     "krippendorff_alpha": {
       "measure": "krippendorff_alpha",
-      "estimate": -0.28454738202604113,
-      "ci_low": -0.3364576526770204,
-      "ci_high": -0.2181615523690103,
+      "estimate": 0.8948604880585901,
+      "ci_low": 0.7478554037496394,
+      "ci_high": 0.9529278357570077,
       "ci_level": 0.95,
       "margin": 0.8,
       "p_value": null,
-      "verdict": "different",
+      "verdict": "indeterminate",
       "reliability_level": "interval",
       "n_items": 24,
       "n_raters": 3,
       "optional": true,
-      "point_alpha": -0.28454738202604113
+      "point_alpha": 0.8948604880585901
     },
-    "pass_rule": "each receiver pair: SpearmanRho AND ConcordanceCC CI lower > 0.80"
+    "pass_rule": "each non-inert receiver pair: SpearmanRho AND ConcordanceCC CI lower > 0.80"
   },
   "e5b_encoder": {
     "passed": false,
     "positive": {
       "n": 24,
-      "mean_cv": 1.7950801701613555,
-      "ci_low": 1.7950801701613555,
-      "ci_high": 1.7950801701613555,
+      "mean_cv": 3.9301649934895857,
+      "ci_low": 2.5081308816285897,
+      "ci_high": 6.4236701949278645,
       "threshold": 0.15,
       "passed": false
     },
     "scrambled_negative_control": {
       "n": 24,
-      "mean_cv": 1.3417915843793475,
-      "ci_low": 1.3417915843793475,
-      "ci_high": 1.3417915843793475,
+      "mean_cv": 0.8925508392602929,
+      "ci_low": 0.6819848363309907,
+      "ci_high": 1.210967540990653,
       "threshold": 0.15,
       "passed": false
     },

@@ -3,6 +3,8 @@
 Writes ``experiments/falsifiability/results/y_panel.jsonl`` (never experiment1).
 
 Data sources, in order:
+  * ``--heldout``: packaged heldout_prompts_v1.json + mixed-quality annotator-bank y
+    (across-domain cross by default)
   * ``--from-jsonl`` rows with prompt + body/y + domain
   * Phase A: Postgres ``poems`` eval split (clear error if missing)
   * Phase B: ``data/subset/eval_all_domains.jsonl`` (+ optional ``--y-jsonl``)
@@ -33,12 +35,23 @@ from lib import (
     write_jsonl,
 )
 
+from creativegainbench.metrics.outcome_annotator import exemplars_for_domain
 from creativegainbench.utils.text_length import length_match
 
 FILLER = (
     "lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod "
     "tempor incididunt ut labore et dolore magna aliqua ut enim ad minim veniam"
 )
+
+HELDOUT_PROMPTS = (
+    REPO_ROOT / "src" / "creativegainbench" / "artifacts" / "heldout_prompts_v1.json"
+)
+HELDOUT_DOMAINS = (
+    "creative_writing",
+    "scientific_proposal",
+    "mathematical_proof",
+)
+ADEQUATE_LABELS = ("novel_structure", "clear_utility", "fluent_paraphrase")
 
 # Phase A: fluent verse on a different topic (not the item's prompt).
 IRRELEVANT_VERSE = (
@@ -167,6 +180,72 @@ def derange_within_domain(
             for src, dst in zip(leftovers, leftovers[1:] + leftovers[:1]):
                 mapping[src] = dst
     return mapping
+
+
+def derange_across_domain(
+    items: Sequence[dict[str, Any]],
+    *,
+    domain_key: str = "domain",
+) -> dict[str, str]:
+    """Permutation whose donor is in a *different* domain (cycle of domain groups).
+
+    Unlike ``derange_within_domain``, this is a test of task-relevant y: a math
+    body on a writing prompt, not another lyric of the same template.
+    """
+    by_d: dict[str, list[str]] = defaultdict(list)
+    for it in items:
+        by_d[str(it.get(domain_key, it.get("domain_cluster", "")))].append(str(it["item_id"]))
+    domains = sorted(by_d)
+    if len(domains) < 2:
+        return derange_within_domain(items, domain_key=domain_key)
+    mapping: dict[str, str] = {}
+    for i, d in enumerate(domains):
+        srcs = by_d[d]
+        dsts = by_d[domains[(i + 1) % len(domains)]]
+        for j, src in enumerate(srcs):
+            mapping[src] = dsts[j % len(dsts)]
+    return mapping
+
+
+def load_heldout_records(n: int = 24, seed: int = 42) -> list[dict[str, Any]]:
+    """n held-out prompts with mixed-quality matched y from OutcomeAnnotator banks."""
+    if not HELDOUT_PROMPTS.exists():
+        raise RuntimeError(f"missing held-out prompts at {HELDOUT_PROMPTS}")
+    data = json.loads(HELDOUT_PROMPTS.read_text(encoding="utf-8"))
+    domains = data.get("domains") or {}
+    rng = random.Random(seed)
+    per = max(1, n // len(HELDOUT_DOMAINS))
+    records: list[dict[str, Any]] = []
+    idx = 0
+    for d in HELDOUT_DOMAINS:
+        prompts = list(domains.get(d) or [])
+        if not prompts:
+            raise RuntimeError(f"held-out file has no prompts for domain {d}")
+        rng.shuffle(prompts)
+        take = prompts[:per]
+        bank = exemplars_for_domain(d)
+        for j, prompt in enumerate(take):
+            # Mix: every 4th item is low-quality so MiniLM z* is not constant.
+            if idx % 4 == 3:
+                label = "low_quality"
+            else:
+                label = ADEQUATE_LABELS[idx % 3]
+            texts = bank.get(label) or bank["low_quality"]
+            body = texts[j % len(texts)]
+            records.append(
+                {
+                    "item_id": f"heldout-{d}-{j}",
+                    "prompt": prompt,
+                    "body": body,
+                    "domain": d,
+                    "domain_cluster": None,
+                    "phase": "b",
+                    "matched_quality": label,
+                }
+            )
+            idx += 1
+    rng.shuffle(records)
+    return records[:n]
 
 
 def stratified_sample(
@@ -344,6 +423,7 @@ def build_panel(
     phase: str = "a",
     length_tol: float = 0.2,
     clip: int = 4000,
+    cross_mode: str = "within_domain",
 ) -> list[dict[str, Any]]:
     rng = random.Random(seed)
     items = [dict(r) for r in records if r.get("prompt") and r.get("body")]
@@ -358,7 +438,10 @@ def build_panel(
     # Stable order for the frozen permutation.
     items.sort(key=lambda r: str(r["item_id"]))
     by_id = {str(r["item_id"]): r for r in items}
-    cross_map = derange_within_domain(items, domain_key=domain_key)
+    if cross_mode == "across_domain":
+        cross_map = derange_across_domain(items, domain_key=domain_key)
+    else:
+        cross_map = derange_within_domain(items, domain_key=domain_key)
 
     # Attach y_matched for irrelevant donor lookup.
     for r in items:
@@ -392,10 +475,12 @@ def build_panel(
             },
             "y_source": {
                 "matched": "self",
+                "matched_quality": rec.get("matched_quality"),
                 "cross": donor_id,
                 "random": "token_shuffle",
                 "irrelevant": irr_meta,
             },
+            "cross_mode": cross_mode,
             "cross_same_domain": same_domain,
             "char_len_matched": target,
             "length_tol": length_tol,
@@ -419,6 +504,17 @@ def main() -> None:
     parser.add_argument("--phase", choices=("a", "b"), default="a")
     parser.add_argument("--limit", type=int, default=None, help="Smoke n (default: config n)")
     parser.add_argument("--synthetic", action="store_true")
+    parser.add_argument(
+        "--heldout",
+        action="store_true",
+        help="n prompts from heldout_prompts_v1.json with mixed-quality annotator-bank y",
+    )
+    parser.add_argument(
+        "--cross-mode",
+        choices=("within_domain", "across_domain"),
+        default=None,
+        help="cross-arm donor permutation (default: across_domain with --heldout)",
+    )
     parser.add_argument("--from-jsonl", type=Path, default=None)
     parser.add_argument("--y-jsonl", type=Path, default=None, help="Phase B matched y's")
     parser.add_argument("--out", type=Path, default=None)
@@ -431,21 +527,38 @@ def main() -> None:
     tol = float(cfg.get("length_tol", 0.2))
     clip = int(cfg.get("clip", 4000))
     phase = args.phase
+    cross_mode = args.cross_mode
 
-    if args.synthetic:
+    if args.heldout:
+        records = load_heldout_records(n=n, seed=seed)
+        phase = "b"
+        cross_mode = cross_mode or "across_domain"
+    elif args.synthetic:
         records = synthetic_records(n, seed=seed, phase=phase)
+        cross_mode = cross_mode or "within_domain"
     elif args.from_jsonl:
         records = load_jsonl_records(args.from_jsonl, phase=phase)
+        cross_mode = cross_mode or "within_domain"
     elif phase == "a":
         records = load_phase_a_postgres(cfg)
+        cross_mode = cross_mode or "within_domain"
     else:
         records = load_phase_b_eval(cfg, y_jsonl=args.y_jsonl)
         if any(not r.get("body") for r in records):
             raise RuntimeError(
                 "Phase B eval prompts have no matched y. Pass --y-jsonl or --synthetic."
             )
+        cross_mode = cross_mode or "within_domain"
 
-    panel = build_panel(records, seed=seed, n=n, phase=phase, length_tol=tol, clip=clip)
+    panel = build_panel(
+        records,
+        seed=seed,
+        n=n,
+        phase=phase,
+        length_tol=tol,
+        clip=clip,
+        cross_mode=cross_mode,
+    )
     out = args.out or (ensure_results_dir(cfg) / "y_panel.jsonl")
     assert_output_isolated(out)
     write_jsonl(out, panel)

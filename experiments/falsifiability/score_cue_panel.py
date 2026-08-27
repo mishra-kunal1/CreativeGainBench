@@ -123,13 +123,15 @@ def score_one(
         external_outcome_index=z_star,
         prior=cached,
     )
-    if cached is None:
+    # Cache only a successful prior. Parse-fail must not freeze a missing/uniform.
+    if cached is None and diag.get("parse_ok_prior") and diag.get("prior"):
         prior_cache.put(receiver_name, prompt, list(diag["prior"]))
     rec = {
         "receiver": receiver_name,
         "arm": arm,
-        "cue": float(cue_val),
+        "cue": None if cue_val is None else float(cue_val),
         "brier_delta": diag.get("brier_delta"),
+        "brier_delta_signed": diag.get("brier_delta_signed"),
         "bit_length": diag.get("bit_length"),
         "z_star": z_star,
         "z_star_source": "matched_frozen",
@@ -137,6 +139,18 @@ def score_one(
         "outcome_label": diag.get("outcome_label"),
         "prior_cached": bool(diag.get("prior_cached")),
         "outcome_source": diag.get("outcome_source"),
+        "prior": diag.get("prior"),
+        "posterior": diag.get("posterior"),
+        "parse_ok": diag.get("parse_ok"),
+        "parse_ok_prior": diag.get("parse_ok_prior"),
+        "parse_ok_posterior": diag.get("parse_ok_posterior"),
+        "parse_reason_prior": diag.get("parse_reason_prior"),
+        "parse_reason_posterior": diag.get("parse_reason_posterior"),
+        "raw_preview_prior": diag.get("raw_preview_prior"),
+        "raw_preview_posterior": diag.get("raw_preview_posterior"),
+        "text_source_prior": diag.get("text_source_prior"),
+        "text_source_posterior": diag.get("text_source_posterior"),
+        "cue_missing_reason": diag.get("cue_missing_reason"),
     }
     return rec
 
@@ -264,15 +278,29 @@ def main() -> None:
     def _run(job: tuple[str, dict[str, Any], str]) -> dict[str, Any]:
         rec_name, row, arm = job
         y = _clip(row["y"][arm], clip)
-        rec = score_one(
-            receiver=rx_by_name[rec_name],
-            receiver_name=rec_name,
-            prompt=row["prompt"],
-            y=y,
-            arm=arm,
-            z_star=z_stars[str(row["item_id"])],
-            prior_cache=prior_cache,
-        )
+        try:
+            rec = score_one(
+                receiver=rx_by_name[rec_name],
+                receiver_name=rec_name,
+                prompt=row["prompt"],
+                y=y,
+                arm=arm,
+                z_star=z_stars[str(row["item_id"])],
+                prior_cache=prior_cache,
+            )
+        except Exception as e:
+            err = f"{type(e).__name__}: {e}"
+            print(f"[warn] {rec_name} {row.get('item_id')} {arm}: {err[:240]}", flush=True)
+            return {
+                "item_id": row["item_id"],
+                "phase": row.get("phase"),
+                "domain": row.get("domain"),
+                "domain_cluster": row.get("domain_cluster"),
+                "receiver": rec_name,
+                "arm": arm,
+                "cue": None,
+                "error": err[:500],
+            }
         rec.update(
             {
                 "item_id": row["item_id"],
@@ -296,6 +324,8 @@ def main() -> None:
         return rec
 
     n_new = 0
+    n_err = 0
+    n_parse_fail = 0
     with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
         futs = [pool.submit(_run, job) for job in jobs]
         for fut in as_completed(futs):
@@ -303,9 +333,20 @@ def main() -> None:
             with file_lock:
                 append_jsonl(out_path, rec)
             n_new += 1
+            if rec.get("error"):
+                n_err += 1
+            elif rec.get("cue") is None:
+                n_parse_fail += 1
             if n_new % 10 == 0:
-                print(f"  wrote {n_new}/{len(jobs)}", flush=True)
-    print(f"DONE score_cue_panel wrote {n_new} → {out_path}", flush=True)
+                print(
+                    f"  wrote {n_new}/{len(jobs)} (errors {n_err}, parse_fail {n_parse_fail})",
+                    flush=True,
+                )
+    print(
+        f"DONE score_cue_panel wrote {n_new} → {out_path} "
+        f"(errors {n_err}, parse_fail {n_parse_fail})",
+        flush=True,
+    )
 
 
 if __name__ == "__main__":

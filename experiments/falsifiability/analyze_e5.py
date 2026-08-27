@@ -38,6 +38,19 @@ from creativegainbench.stats import (
 )
 from score_rd_encoder import per_item_cv
 
+# Matched-arm CUE variance at or below this is treated as an inert receiver
+# (silent zeros / no update), not as a Spearman ρ failure against γ=0.80.
+INERT_VARIANCE_MAX = 1e-12
+
+
+def is_cue_inert(values: np.ndarray | list[float], *, eps: float = INERT_VARIANCE_MAX) -> bool:
+    """True when matched-arm CUE is (near) constant, including n<2."""
+    v = np.asarray(values, float)
+    v = v[np.isfinite(v)]
+    if v.size < 2:
+        return True
+    return float(np.var(v, ddof=0)) <= eps
+
 
 def _matched_cue_matrix(rows: list[dict[str, Any]]) -> tuple[list[str], list[str], np.ndarray]:
     """receivers, item_ids, matrix (n_items, n_receivers) of matched-arm CUE."""
@@ -85,9 +98,32 @@ def analyze_e5a(
     gamma: float = 0.80,
     ci_level: float = 0.95,
 ) -> dict[str, Any]:
-    receivers, items, mat = _matched_cue_matrix(rows)
+    receivers_all, items, mat_all = _matched_cue_matrix(rows)
+    cue_inert = [
+        rx
+        for i, rx in enumerate(receivers_all)
+        if is_cue_inert(mat_all[:, i] if mat_all.size else np.asarray([]))
+    ]
+    keep_idx = [i for i, rx in enumerate(receivers_all) if rx not in cue_inert]
+    receivers = [receivers_all[i] for i in keep_idx]
+    mat = mat_all[:, keep_idx] if keep_idx and mat_all.size else np.zeros((0, 0), float)
     rs = Resampler(n_boot=n_boot, n_perm=n_perm, ci_level=ci_level, seed=seed)
-    pairs = {}
+    pairs: dict[str, Any] = {}
+    if len(receivers) < 2:
+        return {
+            "passed": False,
+            "n_items": len(items),
+            "receivers": receivers,
+            "receivers_all": receivers_all,
+            "cue_inert": cue_inert,
+            "pairs": pairs,
+            "krippendorff_alpha": None,
+            "reason": (
+                "fewer than 2 non-inert receivers; Spearman/CCC not computed "
+                "(inert receivers are excluded, not scored against γ=0.80)"
+            ),
+            "pass_rule": "each non-inert receiver pair: SpearmanRho AND ConcordanceCC CI lower > 0.80",
+        }
     for i, j in itertools.combinations(range(len(receivers)), 2):
         key = f"{receivers[i]} vs {receivers[j]}"
         if len(items) < 3:
@@ -110,9 +146,11 @@ def analyze_e5a(
         "passed": passed,
         "n_items": len(items),
         "receivers": receivers,
+        "receivers_all": receivers_all,
+        "cue_inert": cue_inert,
         "pairs": pairs,
         "krippendorff_alpha": alpha_row,
-        "pass_rule": "each receiver pair: SpearmanRho AND ConcordanceCC CI lower > 0.80",
+        "pass_rule": "each non-inert receiver pair: SpearmanRho AND ConcordanceCC CI lower > 0.80",
     }
 
 
@@ -231,7 +269,8 @@ def _to_md(report: dict[str, Any]) -> str:
         f"**Passed (E5a ∧ E5b):** {report['passed']}",
         "",
         "## E5a receivers",
-        f"Passed: {a['passed']}  ·  n={a['n_items']}  ·  {a['receivers']}",
+        f"Passed: {a['passed']}  ·  n={a['n_items']}  ·  non-inert={a['receivers']}",
+        f"cue_inert (excluded from Spearman/CCC, not a ρ-bar fail): {a.get('cue_inert') or []}",
         "",
     ]
     for key, pair in (a.get("pairs") or {}).items():

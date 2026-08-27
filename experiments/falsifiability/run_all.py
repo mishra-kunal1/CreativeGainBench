@@ -33,6 +33,11 @@ def main() -> None:
     parser.add_argument("--from", dest="from_step", default=None)
     parser.add_argument("--limit", type=int, default=None, help="Smoke n")
     parser.add_argument("--synthetic", action="store_true")
+    parser.add_argument(
+        "--heldout",
+        action="store_true",
+        help="Held-out prompts + mixed-quality y + across-domain cross",
+    )
     parser.add_argument("--skip-score", action="store_true", help="No Ollama / MiniLM scorers")
     parser.add_argument("--skip-analyze", action="store_true")
     parser.add_argument("--base-url", default=None)
@@ -67,9 +72,12 @@ def main() -> None:
                 cmd += ["--limit", str(args.limit)]
             if args.synthetic:
                 cmd += ["--synthetic"]
+            if args.heldout:
+                cmd += ["--heldout"]
         elif step == "construct_probe_pairs":
             if args.synthetic:
                 cmd += ["--synthetic"]
+            # --heldout uses poetry_v2_ctx probes (omit --synthetic)
             if args.limit is not None:
                 cmd += ["--limit", str(args.limit)]
         elif step == "score_cue_panel":

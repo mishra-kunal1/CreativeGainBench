@@ -254,6 +254,74 @@ def test_analyze_e5_fail_wiring():
     assert report["passed"] is False
 
 
+def test_is_cue_inert_constant_vs_varying():
+    assert analyze_e5.is_cue_inert(np.zeros(24))
+    assert analyze_e5.is_cue_inert([0.41] * 12)
+    assert not analyze_e5.is_cue_inert(np.linspace(0.0, 0.5, 24))
+    assert analyze_e5.is_cue_inert([0.2])  # n<2
+
+
+def test_e5a_excludes_inert_receiver_not_as_rho_fail():
+    rows = _e5a_rows(True)
+    n_items = len({r["item_id"] for r in rows})
+    for i in range(n_items):
+        rows.append(
+            {
+                "item_id": f"i{i}",
+                "receiver": "inert-rx",
+                "arm": "matched",
+                "cue": 0.0,
+            }
+        )
+    e5a = analyze_e5.analyze_e5a(rows, n_boot=N_BOOT, n_perm=N_PERM, seed=42)
+    assert "inert-rx" in e5a["cue_inert"]
+    assert "inert-rx" not in e5a["receivers"]
+    assert all("inert-rx" not in key for key in e5a["pairs"])
+    assert e5a["passed"] is True
+
+
+def test_heldout_panel_cross_domain_mixed_quality():
+    records = cc.load_heldout_records(n=24, seed=42)
+    assert len(records) == 24
+    qualities = {r["matched_quality"] for r in records}
+    assert "low_quality" in qualities
+    assert qualities & {"novel_structure", "clear_utility", "fluent_paraphrase"}
+    domains = {r["domain"] for r in records}
+    assert domains == {
+        "creative_writing",
+        "scientific_proposal",
+        "mathematical_proof",
+    }
+    panel = cc.build_panel(
+        records, seed=42, n=24, phase="b", length_tol=0.2, cross_mode="across_domain"
+    )
+    assert len(panel) == 24
+    assert all(r["cross_mode"] == "across_domain" for r in panel)
+    assert all(not r["cross_same_domain"] for r in panel)
+    by_id = {r["item_id"]: r for r in panel}
+    donors = [r["y_source"]["cross"] for r in panel]
+    assert len(donors) == len(set(donors))
+    for row in panel:
+        donor = by_id[row["y_source"]["cross"]]
+        assert donor["domain"] != row["domain"]
+    assert len({r["y_source"]["matched_quality"] for r in panel}) > 1
+    for row in panel:
+        assert cc.length_match_ok(row, tol=0.2)
+        assert row["annotator_domain"] in {
+            "creative_writing",
+            "scientific_proposal",
+            "mathematical_proof",
+        }
+
+
+def test_construct_probe_pairs_prefers_poetry_v2_ctx():
+    cfg = flib.load_config()
+    originals, source = pp.load_original_probes(cfg, synthetic=False)
+    assert source == "poetry_v2_ctx"
+    assert len(originals) > 8
+    assert originals != pp.SYNTHETIC_PROBES
+
+
 def test_freeze_z_star_from_matched_only():
     class Ann:
         def annotate(self, text: str) -> int:
