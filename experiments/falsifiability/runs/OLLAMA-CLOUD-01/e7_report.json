@@ -1,0 +1,25 @@
+{
+  "experiment": "E7",
+  "note": "Not construct-validity E4. Isolation: did not read/write experiments/experiment1/results/cue_*.jsonl.",
+  "scored": false,
+  "passed": null,
+  "primary_receiver": "glm-5.1",
+  "protocol_primary_receiver": "llama3.1:8b",
+  "n_items_cue": 0,
+  "n_panel": 24,
+  "cue_contrasts": [
+    {"control": "cross", "n": 0, "passed": false, "reason": "CUE not scored"},
+    {"control": "random", "n": 0, "passed": false, "reason": "CUE not scored"},
+    {"control": "irrelevant", "n": 0, "passed": false, "reason": "CUE not scored"}
+  ],
+  "brier_delta_contrasts": [],
+  "length": null,
+  "auth": {
+    "error_class": "openai.AuthenticationError",
+    "http_status": 401,
+    "error_type": "api_error",
+    "error_message": "Unauthorized"
+  },
+  "pass_rule": "PairedMeanDiff DIFFERENT + positive estimate + BY p_adj < alpha for {cross, random, irrelevant}; mean |bits_arm/bits_matched-1| < 0.20",
+  "blocked": "OLLAMA_API_KEY missing; fallback key rejected by https://ollama.com/v1. No fake CUE scores."
+}

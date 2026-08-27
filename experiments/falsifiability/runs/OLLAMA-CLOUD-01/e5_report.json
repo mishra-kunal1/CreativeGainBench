@@ -1,0 +1,35 @@
+{
+  "experiment": "E5",
+  "note": "Not construct-validity E5. Isolation: did not read/write experiments/experiment1/results/cue_*.jsonl.",
+  "e5a_receiver": {
+    "passed": false,
+    "n_items": 0,
+    "receivers": [],
+    "pairs": {},
+    "krippendorff_alpha": null,
+    "pass_rule": "each receiver pair: SpearmanRho AND ConcordanceCC CI lower > 0.80"
+  },
+  "e5b_encoder": {
+    "passed": false,
+    "positive": {
+      "n": 24,
+      "mean_cv": 1.7950801701613555,
+      "ci_low": 1.7950801701613555,
+      "ci_high": 1.7950801701613555,
+      "threshold": 0.15,
+      "passed": false
+    },
+    "scrambled_negative_control": {
+      "n": 24,
+      "mean_cv": 1.3417915843793475,
+      "ci_low": 1.3417915843793475,
+      "ci_high": 1.3417915843793475,
+      "threshold": 0.15,
+      "passed": false
+    },
+    "scrambled_must_not_pass": true,
+    "scrambled_control_ok": true,
+    "pass_rule": "BCa CI upper of mean CV(original+plain+technical) < 0.15; scrambled variants must not pass that bar"
+  },
+  "passed": false
+}

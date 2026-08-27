@@ -73,10 +73,22 @@ def _load_frozen_stack(cfg: dict, device: str):
             "It does not rebuild H or the codebook. For tests, pass synthetic "
             "scores to analyze_e5.py instead."
         )
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "construct_validity"))
-    from metrics.pipeline import load_stack  # noqa: E402
+    # construct_validity.metrics.pipeline does `from lib import load_config`.
+    # This suite already imported experiments/falsifiability/lib.py as `lib`, so
+    # isolate that name while loading the frozen poetry_v2 stack.
+    cv_root = Path(__file__).resolve().parents[1] / "construct_validity"
+    sys.path.insert(0, str(cv_root))
+    saved_lib = sys.modules.pop("lib", None)
+    try:
+        from metrics.pipeline import load_stack  # noqa: E402
 
-    return load_stack(device=device)
+        return load_stack(device=device)
+    finally:
+        if saved_lib is not None:
+            sys.modules["lib"] = saved_lib
+        elif "lib" in sys.modules:
+            # Drop construct_validity.lib if falsifiability.lib was not cached.
+            del sys.modules["lib"]
 
 
 def main() -> None:
