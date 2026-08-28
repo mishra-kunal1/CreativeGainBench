@@ -14,6 +14,8 @@ margins:
   log_var_ratio: 0.405465108108  # log(1.5) ≈ 0.405465
   hedges_g: 0.2                  # Cohen "small"
   lins_ccc: 0.80                 # substantial agreement gamma
+  spearman_rho: 0.80             # same gamma as Lin's CCC; pass = BCa CI lower > 0.80
+  paired_mean_diff: 0.0          # CI excluding 0 ⇒ DIFFERENT (E7 yoked contrasts)
   krippendorff_alpha: 0.80       # substantial reliability gamma
   crps: null                     # default: 0.2 * sd(human)
   pit_uniformity: null           # default: 1.36 / sqrt(n)
@@ -34,7 +36,10 @@ metrics:
     framework: null
     level: continuous
     bounds: [0.0, null]
-    margins: {}
+    margins:
+      paired_mean_diff: 0.0      # E7: human=CUE_control, model=CUE_matched
+      spearman_rho: 0.80         # E5a receiver rank agreement
+      lins_ccc: 0.80             # E5a co-primary with SpearmanRho
   structural_novelty:
     framework: null
     level: continuous

@@ -12,9 +12,11 @@ from creativegainbench.stats.creativity_stats import (
     MeasureResult,
     MeasurementLevel,
     PITUniformity,
+    PairedMeanDiff,
     Pairing,
     Resampler,
     Sample,
+    SpearmanRho,
     StatisticalMeasure,
     Verdict,
     benjamini_yekutieli,
@@ -23,6 +25,7 @@ from creativegainbench.stats.creativity_stats import (
     pit_ks_distance,
     pit_values,
     report_to_dict,
+    spearman_rho,
 )
 
 __all__ = [
@@ -39,9 +42,11 @@ __all__ = [
     "MeasureResult",
     "MeasurementLevel",
     "PITUniformity",
+    "PairedMeanDiff",
     "Pairing",
     "Resampler",
     "Sample",
+    "SpearmanRho",
     "StatisticalMeasure",
     "Verdict",
     "benjamini_yekutieli",
@@ -50,4 +55,5 @@ __all__ = [
     "pit_ks_distance",
     "pit_values",
     "report_to_dict",
+    "spearman_rho",
 ]
