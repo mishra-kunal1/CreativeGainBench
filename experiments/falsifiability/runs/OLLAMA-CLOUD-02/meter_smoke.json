@@ -1,0 +1,193 @@
+{
+  "n_items": 2,
+  "receivers": [
+    "gpt-oss:20b",
+    "gemma4:31b",
+    "nemotron-3-nano:30b"
+  ],
+  "rows": [
+    {
+      "receiver": "gpt-oss:20b",
+      "item_id": "heldout-mathematical_proof-1",
+      "domain": "mathematical_proof",
+      "cue": 0.002352906976744186,
+      "parse_ok": true,
+      "parse_ok_prior": true,
+      "parse_ok_posterior": true,
+      "parse_reason_prior": "ok",
+      "parse_reason_posterior": "ok",
+      "prior": [
+        0.03,
+        0.15,
+        0.8,
+        0.02
+      ],
+      "posterior": [
+        0.02,
+        0.03,
+        0.01,
+        0.94
+      ],
+      "raw_preview_prior": "{\"novel_structure\": 0.03, \"fluent_paraphrase\": 0.15, \"clear_utility\": 0.8, \"low_quality\": 0.02}",
+      "raw_preview_posterior": "{\"novel_structure\": 0.02, \"fluent_paraphrase\": 0.03, \"clear_utility\": 0.01, \"low_quality\": 0.94}",
+      "text_source_prior": "content",
+      "text_source_posterior": "content",
+      "brier_delta": 1.6188,
+      "brier_delta_signed": 1.6188,
+      "outcome_label": "low_quality"
+    },
+    {
+      "receiver": "gpt-oss:20b",
+      "item_id": "heldout-scientific_proposal-1",
+      "domain": "scientific_proposal",
+      "cue": 0.0033439655172413795,
+      "parse_ok": true,
+      "parse_ok_prior": true,
+      "parse_ok_posterior": true,
+      "parse_reason_prior": "ok",
+      "parse_reason_posterior": "ok",
+      "prior": [
+        0.1,
+        0.05,
+        0.8,
+        0.05
+      ],
+      "posterior": [
+        0.02,
+        0.02,
+        0.01,
+        0.95
+      ],
+      "raw_preview_prior": "{\"novel_structure\":0.1,\"fluent_paraphrase\":0.05,\"clear_utility\":0.8,\"low_quality\":0.05}",
+      "raw_preview_posterior": "{\"novel_structure\": 0.02, \"fluent_paraphrase\": 0.02, \"clear_utility\": 0.01, \"low_quality\": 0.95}",
+      "text_source_prior": "content",
+      "text_source_posterior": "content",
+      "brier_delta": 1.5516,
+      "brier_delta_signed": 1.5516,
+      "outcome_label": "low_quality"
+    },
+    {
+      "receiver": "gemma4:31b",
+      "item_id": "heldout-mathematical_proof-1",
+      "domain": "mathematical_proof",
+      "cue": 0.0020203488372093027,
+      "parse_ok": true,
+      "parse_ok_prior": true,
+      "parse_ok_posterior": true,
+      "parse_reason_prior": "ok",
+      "parse_reason_posterior": "ok",
+      "prior": [
+        0.05,
+        0.25,
+        0.65,
+        0.05
+      ],
+      "posterior": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "raw_preview_prior": "```json\n{\n  \"novel_structure\": 0.05,\n  \"fluent_paraphrase\": 0.25,\n  \"clear_utility\": 0.65,\n  \"low_quality\": 0.05\n}\n```",
+      "raw_preview_posterior": "```json\n{\n  \"novel_structure\": 0.0,\n  \"fluent_paraphrase\": 0.0,\n  \"clear_utility\": 0.0,\n  \"low_quality\": 1.0\n}\n```",
+      "text_source_prior": "content",
+      "text_source_posterior": "content",
+      "brier_delta": 1.3900000000000001,
+      "brier_delta_signed": 1.3900000000000001,
+      "outcome_label": "low_quality"
+    },
+    {
+      "receiver": "gemma4:31b",
+      "item_id": "heldout-scientific_proposal-1",
+      "domain": "scientific_proposal",
+      "cue": 0.0024676724137931037,
+      "parse_ok": true,
+      "parse_ok_prior": true,
+      "parse_ok_posterior": true,
+      "parse_reason_prior": "ok",
+      "parse_reason_posterior": "ok",
+      "prior": [
+        0.15,
+        0.25,
+        0.5,
+        0.1
+      ],
+      "posterior": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "raw_preview_prior": "```json\n{\n  \"novel_structure\": 0.15,\n  \"fluent_paraphrase\": 0.25,\n  \"clear_utility\": 0.50,\n  \"low_quality\": 0.10\n}\n```",
+      "raw_preview_posterior": "```json\n{\n  \"novel_structure\": 0.0,\n  \"fluent_paraphrase\": 0.0,\n  \"clear_utility\": 0.0,\n  \"low_quality\": 1.0\n}\n```",
+      "text_source_prior": "content",
+      "text_source_posterior": "content",
+      "brier_delta": 1.145,
+      "brier_delta_signed": 1.145,
+      "outcome_label": "low_quality"
+    },
+    {
+      "receiver": "nemotron-3-nano:30b",
+      "item_id": "heldout-mathematical_proof-1",
+      "domain": "mathematical_proof",
+      "cue": 0.0,
+      "parse_ok": true,
+      "parse_ok_prior": true,
+      "parse_ok_posterior": true,
+      "parse_reason_prior": "ok",
+      "parse_reason_posterior": "ok",
+      "prior": [
+        0.08,
+        0.22,
+        0.66,
+        0.04
+      ],
+      "posterior": [
+        0.033,
+        0.033,
+        0.034,
+        0.9
+      ],
+      "raw_preview_prior": "{\n  \"novel_structure\": 0.08,\n  \"fluent_paraphrase\": 0.22,\n  \"clear_utility\": 0.66,\n  \"low_quality\": 0.04\n}",
+      "raw_preview_posterior": "{\n  \"novel_structure\": 0.033,\n  \"fluent_paraphrase\": 0.033,\n  \"clear_utility\": 0.034,\n  \"low_quality\": 0.9\n}",
+      "text_source_prior": "content",
+      "text_source_posterior": "content",
+      "brier_delta": 0.0,
+      "brier_delta_signed": -0.41533399999999987,
+      "outcome_label": "novel_structure"
+    },
+    {
+      "receiver": "nemotron-3-nano:30b",
+      "item_id": "heldout-scientific_proposal-1",
+      "domain": "scientific_proposal",
+      "cue": 0.0026293103448275863,
+      "parse_ok": true,
+      "parse_ok_prior": true,
+      "parse_ok_posterior": true,
+      "parse_reason_prior": "ok",
+      "parse_reason_posterior": "ok",
+      "prior": [
+        0.35,
+        0.15,
+        0.45,
+        0.05
+      ],
+      "posterior": [
+        0.05,
+        0.05,
+        0.05,
+        0.85
+      ],
+      "raw_preview_prior": "{\n  \"novel_structure\": 0.35,\n  \"fluent_paraphrase\": 0.15,\n  \"clear_utility\": 0.45,\n  \"low_quality\": 0.05\n}",
+      "raw_preview_posterior": "{\n  \"novel_structure\": 0.05,\n  \"fluent_paraphrase\": 0.05,\n  \"clear_utility\": 0.05,\n  \"low_quality\": 0.85\n}",
+      "text_source_prior": "content",
+      "text_source_posterior": "content",
+      "brier_delta": 1.22,
+      "brier_delta_signed": 1.22,
+      "outcome_label": "low_quality"
+    }
+  ],
+  "gpt_oss_inert": false,
+  "failures": [],
+  "passed": true
+}

@@ -23,6 +23,7 @@ from db.connection import connect, run_migrations  # noqa: E402
 from db.queries import clear_calibration, fetch_poems_by_split  # noqa: E402
 from lib import load_config  # noqa: E402
 from metrics.pipeline import feasibility_bit, load_stack  # noqa: E402
+from creativegainbench.utils.text_length import length_match as _length_match  # noqa: E402
 
 
 def _median_chars(bodies: list[str]) -> int:
@@ -30,35 +31,6 @@ def _median_chars(bodies: list[str]) -> int:
     if not lens:
         return 400
     return int(statistics.median(lens))
-
-
-def _length_match(text: str, target: int, *, tol: float = 0.2) -> str:
-    """
-    Force text into [target*(1-tol), target*(1+tol)] chars.
-
-    Shorter → repeat lines; longer → truncate on a line boundary when possible.
-    """
-    t = (text or "").strip()
-    if target <= 0:
-        return t
-    lo = max(1, int(target * (1.0 - tol)))
-    hi = max(lo, int(target * (1.0 + tol)))
-    if len(t) < lo:
-        lines = [ln for ln in t.splitlines() if ln.strip()] or [t]
-        out = t
-        i = 0
-        while len(out) < lo:
-            out = (out + "\n" + lines[i % len(lines)]).strip()
-            i += 1
-            if i > 500:
-                break
-        t = out
-    if len(t) > hi:
-        cut = t[:hi]
-        if "\n" in cut:
-            cut = cut.rsplit("\n", 1)[0]
-        t = cut.strip()
-    return t
 
 
 def _paraphrase(text: str) -> str:

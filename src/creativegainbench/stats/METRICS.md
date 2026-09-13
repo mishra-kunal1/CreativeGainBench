@@ -17,6 +17,8 @@ pipeline configs.
 | Log variance ratio | `log_var_ratio` | UNPAIRED | SIGNED_DIFFERENCE | `log(1.5)` |
 | Hedges' g | `hedges_g` | UNPAIRED | SIGNED_DIFFERENCE | `0.2` |
 | Lin's CCC | `lins_ccc` | PAIRED | AGREEMENT | `0.80` |
+| Paired mean difference | `paired_mean_diff` | PAIRED | SIGNED_DIFFERENCE | `0.0` (CI excluding 0 ⇒ DIFFERENT) |
+| Spearman ρ | `spearman_rho` | PAIRED | AGREEMENT | `0.80` (pass = BCa CI lower > 0.80) |
 | Krippendorff α | `krippendorff_alpha` | items (rater matrix) | AGREEMENT | `0.80` |
 | CRPS | `crps` | PAIRED by item | NONNEG_DISTANCE | `0.2 * sd(human)` |
 | PIT uniformity | `pit_uniformity` | PAIRED by item | NONNEG_DISTANCE | `1.36 / sqrt(n)` |
@@ -36,7 +38,7 @@ recommended measures / margins when registering each as a `CreativityMetric`.
 - **Framework:** `[ ]` (Lean-aligned CUE)
 - **Level:** `[ ]` continuous (nonnegative efficiency)
 - **Bounds:** `[ ]` typically ≥ 0; upper unbound or study-specific
-- **Recommended measures:** `[ ]` energy_distance, hedges_g, log_var_ratio; lins_ccc if paired judge
+- **Recommended measures:** `[ ]` energy_distance, hedges_g, log_var_ratio; lins_ccc if paired judge; **paired_mean_diff** (E7 yoked CUE contrasts); **spearman_rho** + lins_ccc (E5a receiver pairs)
 - **Margins:** `[ ]` override in `config.yaml`
 - **Notes:** Brier-delta / bit-length; receiver-grounded
 
@@ -123,6 +125,8 @@ metrics:
       log_var_ratio: null
       hedges_g: null
       lins_ccc: null
+      spearman_rho: null
+      paired_mean_diff: 0.0
       krippendorff_alpha: null
       crps: null
       pit_uniformity: null

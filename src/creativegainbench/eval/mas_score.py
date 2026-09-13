@@ -180,6 +180,8 @@ def main() -> None:
     def cue_fn(prompt: str, y: str) -> float:
         if cue_receiver is not None:
             val, _m, _d = cue_receiver.compute_cue_for_output(prompt, y)
+            if val is None:
+                raise RuntimeError("CUE elicitation parse failed")
             return float(val)
         val, _m = stub_positive_cue(y)
         return float(val)
