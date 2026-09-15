@@ -150,7 +150,23 @@ src/creativegainbench/
 
 ```bash
 pytest -q
+python -m pytest tests/test_creativity_stats.py tests/test_falsifiability.py -q
 ```
+
+## Falsifiability (E5 / E7)
+
+Receiver/encoder stability (E5) and causal contribution controls (E7) live in
+[`experiments/falsifiability/`](experiments/falsifiability/). These IDs are
+**not** the construct-validity E4/E5 checks and do not write
+`experiments/experiment1/results/cue_*.jsonl`. See that suite's PROTOCOL.md
+before any live scoring.
+
+```bash
+python experiments/falsifiability/run_all.py --phase a --limit 8 --synthetic --skip-score
+```
+
+Live Ollama Phase A (`--limit` smoke, `--base-url` local or `https://ollama.com/v1`)
+is a follow-up; unit tests do not call Ollama, GPU, or Postgres.
 
 ## Formal backing
 
