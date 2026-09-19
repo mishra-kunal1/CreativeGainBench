@@ -214,17 +214,22 @@ def main() -> None:
                     )
                 except Exception as e:
                     print(f"[warn] CUE failed {sid}/{side}: {e}", flush=True)
-                    cue_val, diag = 0.0, {"outcome_label": "error", "error": str(e)}
-                results[sid][side]["cue"] = float(cue_val)
-                results[sid][side]["cue_gate"] = float(cue_gate(cue_val))
+                    cue_val, diag = None, {"outcome_label": "error", "error": str(e)}
+                results[sid][side]["cue"] = None if cue_val is None else float(cue_val)
+                results[sid][side]["cue_gate"] = (
+                    0.0 if cue_val is None else float(cue_gate(cue_val))
+                )
                 results[sid][side]["outcome_label"] = diag.get("outcome_label")
                 results[sid][side]["outcome_source"] = diag.get("outcome_source")
                 results[sid][side]["z_star_source"] = diag.get("z_star_source")
                 results[sid][side]["brier_delta"] = diag.get("brier_delta")
+                results[sid][side]["parse_ok"] = diag.get("parse_ok")
                 # Composite: both gates × CUE (α R_B dropped — diagnostic)
                 rd_gate = results[sid][side]["r_d_gate"]
                 cg = results[sid][side]["cue_gate"]
-                results[sid][side]["r_creativity"] = float(cg * rd_gate * cue_val)
+                results[sid][side]["r_creativity"] = (
+                    0.0 if cue_val is None else float(cg * rd_gate * cue_val)
+                )
             if (j + 1) % 10 == 0 or j + 1 == len(cue_ids):
                 print(f"CUE {j+1}/{len(cue_ids)}", flush=True)
 
