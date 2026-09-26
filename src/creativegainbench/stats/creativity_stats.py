@@ -463,6 +463,78 @@ class ConcordanceCC(StatisticalMeasure):
         return 0.80   # "substantial" agreement threshold gamma
 
 
+def _average_ranks(vals: np.ndarray) -> np.ndarray:
+    """Tie-aware average ranks (1-based). Ties share the mean of their ordinals."""
+    vals = np.asarray(vals, float).ravel()
+    n = len(vals)
+    order = np.argsort(vals, kind="mergesort")
+    ranks = np.empty(n, dtype=float)
+    i = 0
+    while i < n:
+        j = i
+        while j + 1 < n and vals[order[j + 1]] == vals[order[i]]:
+            j += 1
+        avg = (i + j) / 2.0 + 1.0
+        ranks[order[i : j + 1]] = avg
+        i = j + 1
+    return ranks
+
+
+def spearman_rho(human: np.ndarray, model: np.ndarray) -> float:
+    """Pearson correlation of tie-aware average ranks. NaN if n<3 or a rank vector is constant."""
+    h = np.asarray(human, float).ravel()
+    m = np.asarray(model, float).ravel()
+    if len(h) != len(m) or len(h) < 3:
+        return float("nan")
+    rh = _average_ranks(h)
+    rm = _average_ranks(m)
+    rh = rh - rh.mean()
+    rm = rm - rm.mean()
+    den = float(np.sqrt(np.sum(rh ** 2) * np.sum(rm ** 2)))
+    if den < 1e-15:
+        return float("nan")
+    return float(np.sum(rh * rm) / den)
+
+
+class PairedMeanDiff(StatisticalMeasure):
+    """Mean(model − human) on paired items. SIGNED_DIFFERENCE; margin 0 ⇒ CI excluding 0 is DIFFERENT.
+
+    E7 convention: human = CUE_control, model = CUE_matched so a positive estimate
+    means the matched contribution scored higher than the yoked control.
+    """
+    pairing = Pairing.PAIRED
+    geometry = Geometry.SIGNED_DIFFERENCE
+
+    @property
+    def name(self):
+        return "paired_mean_diff"
+
+    def statistic(self, h, m):
+        return float(np.mean(m - h))
+
+    def default_margin(self, s: Sample):
+        return 0.0
+
+
+class SpearmanRho(StatisticalMeasure):
+    """Spearman rank correlation (tie-aware average ranks). AGREEMENT; γ = 0.80.
+
+    Pass is BCa CI lower bound > 0.80 (EQUIVALENT), not a point estimate.
+    """
+    pairing = Pairing.PAIRED
+    geometry = Geometry.AGREEMENT
+
+    @property
+    def name(self):
+        return "spearman_rho"
+
+    def statistic(self, h, m):
+        return spearman_rho(h, m)
+
+    def default_margin(self, s: Sample):
+        return 0.80
+
+
 # --------------------------------------------------------------------------- #
 # Reliability gate + calibration (Sample extensions)                           #
 # --------------------------------------------------------------------------- #
