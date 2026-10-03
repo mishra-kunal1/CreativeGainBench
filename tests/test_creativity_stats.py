@@ -16,9 +16,11 @@ from creativegainbench.stats import (
     LogVarianceRatio,
     MeasurementLevel,
     PITUniformity,
+    PairedMeanDiff,
     Pairing,
     Resampler,
     Sample,
+    SpearmanRho,
     StatisticalMeasure,
     Verdict,
     krippendorff_alpha,
@@ -26,6 +28,7 @@ from creativegainbench.stats import (
     pit_ks_distance,
     pit_values,
     report_to_dict,
+    spearman_rho,
 )
 
 
@@ -390,3 +393,102 @@ def test_unpaired_behavior_unchanged_with_extensions_absent():
     rep = pipe.run(_ToyMetric(), sample)
     names = {r.name for r in rep.results}
     assert names == {"energy_distance", "hedges_g"}
+
+
+def test_paired_mean_diff_known_vector():
+    h = np.array([1.0, 2.0, 3.0, 4.0])
+    m = np.array([2.0, 3.0, 4.0, 5.0])
+    assert PairedMeanDiff().statistic(h, m) == pytest.approx(1.0)
+    sample = Sample(h, m, item_ids=np.arange(4))
+    assert PairedMeanDiff().default_margin(sample) == 0.0
+
+
+def test_paired_mean_diff_requires_pairing_contract():
+    msr = PairedMeanDiff()
+    rs = Resampler(n_boot=20, n_perm=20, seed=30)
+    with pytest.raises(ValueError, match="item_ids"):
+        msr.evaluate(Sample([1.0, 2.0], [1.5, 2.5]), rs)
+    with pytest.raises(ValueError, match="equal-length"):
+        msr.evaluate(Sample([1.0, 2.0], [1.5], item_ids=np.array([0, 1])), rs)
+
+
+def test_paired_mean_diff_signed_verdict_margin_zero():
+    msr = PairedMeanDiff()
+    assert msr.pairing is Pairing.PAIRED
+    assert msr.geometry is Geometry.SIGNED_DIFFERENCE
+    # margin 0: CI entirely above 0 + significant p → DIFFERENT (matched higher)
+    assert msr._verdict(0.1, 0.4, p=0.01, margin=0.0) is Verdict.DIFFERENT
+    # CI covering 0, non-sig → INDETERMINATE
+    assert msr._verdict(-0.1, 0.2, p=0.5, margin=0.0) is Verdict.INDETERMINATE
+    # CI entirely below 0 + sig → DIFFERENT (control higher; E7 then fails on sign)
+    assert msr._verdict(-0.4, -0.1, p=0.01, margin=0.0) is Verdict.DIFFERENT
+
+
+def test_paired_mean_diff_positive_shift_is_different():
+    rng = np.random.default_rng(31)
+    h = rng.normal(0.0, 0.05, 40)
+    m = h + 0.35
+    sample = Sample(h, m, item_ids=np.arange(40))
+    result = PairedMeanDiff().evaluate(sample, Resampler(n_boot=80, n_perm=80, seed=32))
+    assert result.estimate == pytest.approx(0.35, abs=1e-12)
+    assert result.verdict is Verdict.DIFFERENT
+    assert result.ci_low > 0.0
+
+
+def test_spearman_rho_known_vectors_and_ties():
+    x = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
+    assert spearman_rho(x, x) == pytest.approx(1.0)
+    assert SpearmanRho().statistic(x, x) == pytest.approx(1.0)
+    assert spearman_rho(x, x[::-1]) == pytest.approx(-1.0)
+    # average ranks: two 1s share 1.5
+    tied = np.array([1.0, 1.0, 2.0, 3.0])
+    assert spearman_rho(tied, tied) == pytest.approx(1.0)
+    assert np.isnan(spearman_rho([1.0, 2.0], [1.0, 2.0]))  # n < 3
+
+
+def test_spearman_rho_pairing_and_agreement_verdict():
+    msr = SpearmanRho()
+    assert msr.pairing is Pairing.PAIRED
+    assert msr.geometry is Geometry.AGREEMENT
+    assert msr.default_margin(Sample([0, 1, 2], [0, 1, 2], item_ids=[0, 1, 2])) == 0.80
+    assert msr._verdict(0.85, 0.99, p=None, margin=0.80) is Verdict.EQUIVALENT
+    assert msr._verdict(0.10, 0.50, p=None, margin=0.80) is Verdict.DIFFERENT
+    assert msr._verdict(0.70, 0.90, p=None, margin=0.80) is Verdict.INDETERMINATE
+    with pytest.raises(ValueError, match="item_ids"):
+        msr.evaluate(Sample([1.0, 2.0, 3.0], [1.0, 2.0, 3.0]), Resampler(n_boot=10, n_perm=10, seed=1))
+
+
+def test_spearman_rho_high_agreement_passes_gamma():
+    rng = np.random.default_rng(33)
+    h = rng.normal(0.0, 1.0, 50)
+    m = h + rng.normal(0.0, 0.02, 50)
+    sample = Sample(h, m, item_ids=np.arange(50))
+    result = SpearmanRho().evaluate(sample, Resampler(n_boot=80, n_perm=20, seed=34))
+    assert result.estimate > 0.80
+    assert result.ci_low > 0.80
+    assert result.verdict is Verdict.EQUIVALENT
+    assert result.p_value is None  # AGREEMENT: CI-only
+
+
+def test_pipeline_skips_new_paired_measures_without_item_ids():
+    rng = np.random.default_rng(35)
+    sample = Sample(rng.normal(0, 1, 25), rng.normal(0, 1, 25))
+    pipe = ComparisonPipeline(
+        measures=[PairedMeanDiff(), SpearmanRho(), HedgesG()],
+        resampler=Resampler(n_boot=20, n_perm=20, seed=36),
+    )
+    names = {r.name for r in pipe.run(_ToyMetric(), sample).results}
+    assert names == {"hedges_g"}
+
+
+def test_pipeline_runs_paired_mean_diff_and_spearman_with_item_ids():
+    rng = np.random.default_rng(37)
+    h = rng.normal(0.5, 0.1, 30)
+    m = h + 0.01
+    sample = Sample(h, m, item_ids=np.arange(30))
+    pipe = ComparisonPipeline(
+        measures=[PairedMeanDiff(), SpearmanRho()],
+        resampler=Resampler(n_boot=30, n_perm=30, seed=38),
+    )
+    names = {r.name for r in pipe.run(_ToyMetric(), sample).results}
+    assert names == {"paired_mean_diff", "spearman_rho"}
