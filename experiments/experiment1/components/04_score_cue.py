@@ -129,14 +129,15 @@ def main() -> None:
                         )
                     except Exception as e:
                         print(f"[warn] CUE {model}/{sid}/{side}: {e}", flush=True)
-                        cue_val, diag = 0.0, {"outcome_label": "error", "error": str(e)}
+                        cue_val, diag = None, {"outcome_label": "error", "error": str(e)}
                     rec[side] = {
-                        "cue": float(cue_val),
-                        "cue_gate": float(cue_gate(cue_val)),
+                        "cue": None if cue_val is None else float(cue_val),
+                        "cue_gate": 0.0 if cue_val is None else float(cue_gate(cue_val)),
                         "outcome_label": diag.get("outcome_label"),
                         "outcome_source": diag.get("outcome_source"),
                         "z_star_source": diag.get("z_star_source"),
                         "brier_delta": diag.get("brier_delta"),
+                        "parse_ok": diag.get("parse_ok"),
                     }
                 # Attach R_D gates from prior scores if present
                 with psycopg.connect(cfg["db_url"]) as conn:
@@ -156,8 +157,11 @@ def main() -> None:
                             rec[side_key]["r_d_gate"] = payload.get("r_d_gate")
                             cg = rec[side_key]["cue_gate"]
                             dg = float(payload.get("r_d_gate") or 0)
-                            rec[side_key]["r_creativity"] = float(
-                                cg * dg * rec[side_key]["cue"]
+                            cue_side = rec[side_key]["cue"]
+                            rec[side_key]["r_creativity"] = (
+                                0.0
+                                if cue_side is None
+                                else float(cg * dg * cue_side)
                             )
                 fout.write(json.dumps(rec) + "\n")
                 fout.flush()
