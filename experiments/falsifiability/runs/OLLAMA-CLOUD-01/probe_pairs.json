@@ -1,0 +1,79 @@
+{
+  "seed": 42,
+  "source": "synthetic",
+  "n": 8,
+  "length_tol": 0.2,
+  "note": "H / codebook / MiniLM / delta_D stay frozen; only probe encodings are rebuilt.",
+  "banks": {
+    "original": [
+      "A volta that turns grief into a misdrawn map legend.",
+      "Each couplet rewrites the previous metaphor's physics.",
+      "Two meters braid until a third rhythm appears.",
+      "Sunrise-as-hope restated in conventional nature lyric.",
+      "Broken lines with topic drift and unfinished clauses.",
+      "Prove the inductive step without naming the hypothesis.",
+      "A sensor network that reuses bus routes as sample paths.",
+      "A scene where rival chefs invent a dish neither can claim."
+    ],
+    "plain": [
+      "In other words:\nA volta that turns grief into a misdrawn map l",
+      "In other words:\nEach couplet rewrites a previous metaphor's phys",
+      "In other words:\nTwo meters braid until a third rhythm a",
+      "In other words:\nSunrise-as-hope restated in conventional nature",
+      "In other words:\nBroken lines with topic drift and unfinished cl",
+      "In other words:\nProve a inductive step without naming a hypothesis",
+      "In other words:\nA sensor network that reuses bus routes as sample p",
+      "In other words:\nA scene where rival chefs invent a dish neither can c"
+    ],
+    "technical": [
+      "Technical restatement:\nA volta that turns grief into a misdraw",
+      "Technical restatement:\nEach couplet rewrites the previous metaph",
+      "Technical restatement:\nTwo meters braid until a third r",
+      "Technical restatement:\nSunrise-as-hope restated in conventional",
+      "Technical restatement:\nBroken lines with topic drift and unfini",
+      "Technical restatement:\nestablish the inductive step without naming",
+      "Technical restatement:\nA sensor network that reuses bus routes as s",
+      "Technical restatement:\nA scene where rival chefs invent a dish neithe"
+    ],
+    "scrambled": [
+      "misdrawn turns that map into a legend. grief A volta",
+      "couplet physics. Each previous rewrites the metaphor's",
+      "third appears. rhythm braid a Two until meters",
+      "conventional lyric. Sunrise-as-hope nature in restated",
+      "topic with drift clauses. lines Broken unfinished and",
+      "inductive Prove the the step hypothesis. naming without",
+      "routes sensor that network bus A sample reuses as paths.",
+      "invent scene a dish rival claim. chefs A can neither where"
+    ],
+    "scrambled_0": [
+      "misdrawn turns that map into a legend. grief A volta",
+      "couplet physics. Each previous rewrites the metaphor's",
+      "third appears. rhythm braid a Two until meters",
+      "conventional lyric. Sunrise-as-hope nature in restated",
+      "topic with drift clauses. lines Broken unfinished and",
+      "inductive Prove the the step hypothesis. naming without",
+      "routes sensor that network bus A sample reuses as paths.",
+      "invent scene a dish rival claim. chefs A can neither where"
+    ],
+    "scrambled_1": [
+      "turns into that grief volta map misdrawn A a legend.",
+      "metaphor's the couplet previous Each rewrites physics.",
+      "braid a appears. meters rhythm Two third until",
+      "conventional nature in restated Sunrise-as-hope lyric.",
+      "topic and unfinished with clauses. lines Broken drift",
+      "the hypothesis. naming the Prove step without inductive",
+      "as sample bus network A that paths. routes reuses sensor",
+      "scene where a dish invent neither claim. can A rival chefs"
+    ],
+    "scrambled_2": [
+      "misdrawn into A that grief legend. volta a turns map",
+      "the couplet Each metaphor's previous physics. rewrites",
+      "third a meters braid appears. Two rhythm until",
+      "in Sunrise-as-hope lyric. nature conventional restated",
+      "drift clauses. Broken with lines topic and unfinished",
+      "without hypothesis. the Prove step naming the inductive",
+      "network that A paths. as bus routes reuses sensor sample",
+      "scene a A rival invent chefs can claim. neither dish where"
+    ]
+  }
+}
