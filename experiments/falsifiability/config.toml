@@ -1,0 +1,41 @@
+# Falsifiability suite (E5 / E7) — not construct-validity E4/E5.
+# Isolation: never write experiments/experiment1/results/cue_*.jsonl
+
+seed = 42
+n = 80
+clip = 4000
+workers = 2
+temperature = 0.0
+length_tol = 0.20
+alpha = 0.05
+n_boot = 2000
+n_perm = 2000
+ci_level = 0.95
+
+# Ollama OpenAI-compat. Override with --base-url.
+# local:  http://127.0.0.1:11434/v1
+# cloud:  https://ollama.com/v1
+base_url = "http://127.0.0.1:11434/v1"
+
+# Optional Phase A poems. DATABASE_URL wins when set.
+db_url = "postgres://poems:poems@localhost:5432/poems"
+split = "eval"
+metric_version = "poetry_v2"
+artifacts_rel = "src/creativegainbench/artifacts/poetry_v2"
+
+# Capability band (weak → mid → strong). Same ladder names as experiment1.
+receivers = [
+  "gemma2:2b",
+  "llama3.1:8b",
+  "phi4:14b",
+]
+
+[e7]
+primary_receiver = "llama3.1:8b"
+controls = ["cross", "random", "irrelevant"]
+length_tol = 0.20
+
+[e5]
+agreement_gamma = 0.80
+encoder_cv_threshold = 0.15
+krippendorff_gamma = 0.80
