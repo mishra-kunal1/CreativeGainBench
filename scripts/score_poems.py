@@ -123,6 +123,10 @@ def main() -> None:
     def _score_text(prompt: str, text: str) -> dict:
         text = text.strip()[:MAX_TEXT_CHARS]
         _cue_val, cue_model, cue_diag = cue_receiver.compute_cue_for_output(prompt, text)
+        if cue_model is None:
+            raise RuntimeError(
+                f"CUE parse failed: {cue_diag.get('cue_missing_reason') or cue_diag}"
+            )
         result = compute_r_creativity(
             text,
             pipeline=pipeline,

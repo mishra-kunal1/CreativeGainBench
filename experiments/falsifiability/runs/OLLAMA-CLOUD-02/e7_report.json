@@ -1,0 +1,113 @@
+{
+  "experiment": "E7",
+  "note": "Not construct-validity E4. Isolation: did not read/write experiments/experiment1/results/cue_*.jsonl.",
+  "primary_receiver": "gemma4:31b",
+  "n_items_cue": 24,
+  "passed": false,
+  "cue_contrasts": [
+    {
+      "control": "cross",
+      "n": 24,
+      "measure": "paired_mean_diff",
+      "estimate": 0.00020001546634288372,
+      "ci_low": 5.260587566662029e-05,
+      "ci_high": 0.0004378898204592373,
+      "margin": 0.0,
+      "p_value": 0.03398300849575212,
+      "verdict": "different",
+      "hedges_g_unpaired_diagnostic": 0.18564033059564464,
+      "positive_estimate": true,
+      "p_adj_by": 0.09345327336331834,
+      "passed": false
+    },
+    {
+      "control": "random",
+      "n": 24,
+      "measure": "paired_mean_diff",
+      "estimate": 0.00017844742063492067,
+      "ci_low": 5.0843253968253994e-05,
+      "ci_high": 0.00043590110508573947,
+      "margin": 0.0,
+      "p_value": 0.06496751624187906,
+      "verdict": "indeterminate",
+      "hedges_g_unpaired_diagnostic": 0.16199801825549148,
+      "positive_estimate": true,
+      "p_adj_by": 0.11910711311011159,
+      "passed": false
+    },
+    {
+      "control": "irrelevant",
+      "n": 24,
+      "measure": "paired_mean_diff",
+      "estimate": 0.0002776824519360222,
+      "ci_low": 0.0001467065702268821,
+      "ci_high": 0.0005141469147702506,
+      "margin": 0.0,
+      "p_value": 0.004497751124437781,
+      "verdict": "different",
+      "hedges_g_unpaired_diagnostic": 0.27350649235228214,
+      "positive_estimate": true,
+      "p_adj_by": 0.024737631184407794,
+      "passed": true
+    }
+  ],
+  "brier_delta_contrasts": [
+    {
+      "control": "cross",
+      "n": 24,
+      "measure": "paired_mean_diff",
+      "estimate": 0.12291666666666667,
+      "ci_low": 0.03562500000000002,
+      "ci_high": 0.28629211620497946,
+      "margin": 0.0,
+      "p_value": 0.12543728135932034,
+      "verdict": "indeterminate",
+      "hedges_g_unpaired_diagnostic": 0.22865031379242376,
+      "positive_estimate": true,
+      "p_adj_by": 0.24279526903215057,
+      "passed": false
+    },
+    {
+      "control": "random",
+      "n": 24,
+      "measure": "paired_mean_diff",
+      "estimate": 0.12291666666666669,
+      "ci_low": 0.03562500000000002,
+      "ci_high": 0.2851025712684556,
+      "margin": 0.0,
+      "p_value": 0.13243378310844578,
+      "verdict": "indeterminate",
+      "hedges_g_unpaired_diagnostic": 0.22865031379242376,
+      "positive_estimate": true,
+      "p_adj_by": 0.24279526903215057,
+      "passed": false
+    },
+    {
+      "control": "irrelevant",
+      "n": 24,
+      "measure": "paired_mean_diff",
+      "estimate": 0.12479166666666669,
+      "ci_low": 0.036435614458265576,
+      "ci_high": 0.28020224057134907,
+      "margin": 0.0,
+      "p_value": 0.015992003998001,
+      "verdict": "different",
+      "hedges_g_unpaired_diagnostic": 0.23268286854041212,
+      "positive_estimate": true,
+      "p_adj_by": 0.08795602198900548,
+      "passed": false
+    }
+  ],
+  "length": {
+    "mean_abs_rel_bits": 0.10906379159872032,
+    "n": 72,
+    "tol": 0.2,
+    "passed": true,
+    "by_arm": {
+      "cross": 0.15393575793160943,
+      "random": 0.0,
+      "irrelevant": 0.17325561686455151
+    }
+  },
+  "pass_rule": "PairedMeanDiff DIFFERENT + positive estimate + BY p_adj < alpha for {cross, random, irrelevant}; mean |bits_arm/bits_matched-1| < 0.20"
+}
