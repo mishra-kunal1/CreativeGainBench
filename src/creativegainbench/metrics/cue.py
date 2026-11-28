@@ -56,14 +56,24 @@ def brier_score(probs: Sequence[float], outcome_index: int) -> float:
     return total
 
 
+def brier_delta_signed(
+    prior: Sequence[float],
+    posterior: Sequence[float],
+    outcome_index: int,
+) -> float:
+    """Signed Brier improvement (posterior vs prior); may be negative."""
+    return float(
+        brier_score(prior, outcome_index) - brier_score(posterior, outcome_index)
+    )
+
+
 def brier_delta(
     prior: Sequence[float],
     posterior: Sequence[float],
     outcome_index: int,
 ) -> float:
     """Nonnegative Brier improvement; clipped at 0 for numerical noise."""
-    delta = brier_score(prior, outcome_index) - brier_score(posterior, outcome_index)
-    return max(0.0, float(delta))
+    return max(0.0, brier_delta_signed(prior, posterior, outcome_index))
 
 
 def compute_cue(model: CUEModel) -> float:

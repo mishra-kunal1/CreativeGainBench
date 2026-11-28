@@ -1,0 +1,138 @@
+{
+  "experiment": "E5",
+  "note": "Not construct-validity E5. Isolation: did not read/write experiments/experiment1/results/cue_*.jsonl.",
+  "e5a_receiver": {
+    "passed": false,
+    "n_items": 24,
+    "receivers": [
+      "gemma4:31b",
+      "gpt-oss:20b",
+      "nemotron-3-nano:30b"
+    ],
+    "receivers_all": [
+      "gemma4:31b",
+      "gpt-oss:20b",
+      "nemotron-3-nano:30b"
+    ],
+    "cue_inert": [],
+    "pairs": {
+      "gemma4:31b vs gpt-oss:20b": {
+        "spearman_rho": {
+          "measure": "spearman_rho",
+          "estimate": 0.87992618004209,
+          "ci_low": 0.6535438908079985,
+          "ci_high": 0.9772482025506058,
+          "ci_level": 0.95,
+          "margin": 0.8,
+          "p_value": null,
+          "verdict": "indeterminate"
+        },
+        "lins_ccc": {
+          "measure": "lins_ccc",
+          "estimate": 0.9039610518269733,
+          "ci_low": 0.6776296027759435,
+          "ci_high": 0.9653197580419576,
+          "ci_level": 0.95,
+          "margin": 0.8,
+          "p_value": null,
+          "verdict": "indeterminate"
+        },
+        "passed": false,
+        "pass_rule": "both BCa CI lowers > 0.80",
+        "receiver_a": "gemma4:31b",
+        "receiver_b": "gpt-oss:20b"
+      },
+      "gemma4:31b vs nemotron-3-nano:30b": {
+        "spearman_rho": {
+          "measure": "spearman_rho",
+          "estimate": 0.7668116586540459,
+          "ci_low": 0.3821674226045899,
+          "ci_high": 0.9016576926170298,
+          "ci_level": 0.95,
+          "margin": 0.8,
+          "p_value": null,
+          "verdict": "indeterminate"
+        },
+        "lins_ccc": {
+          "measure": "lins_ccc",
+          "estimate": 0.9159660265241228,
+          "ci_low": 0.7292514343426315,
+          "ci_high": 0.9705106138378288,
+          "ci_level": 0.95,
+          "margin": 0.8,
+          "p_value": null,
+          "verdict": "indeterminate"
+        },
+        "passed": false,
+        "pass_rule": "both BCa CI lowers > 0.80",
+        "receiver_a": "gemma4:31b",
+        "receiver_b": "nemotron-3-nano:30b"
+      },
+      "gpt-oss:20b vs nemotron-3-nano:30b": {
+        "spearman_rho": {
+          "measure": "spearman_rho",
+          "estimate": 0.7885590293476283,
+          "ci_low": 0.5806141104924957,
+          "ci_high": 0.9156069384684922,
+          "ci_level": 0.95,
+          "margin": 0.8,
+          "p_value": null,
+          "verdict": "indeterminate"
+        },
+        "lins_ccc": {
+          "measure": "lins_ccc",
+          "estimate": 0.8646700769040122,
+          "ci_low": 0.6222953823776591,
+          "ci_high": 0.9450546283068387,
+          "ci_level": 0.95,
+          "margin": 0.8,
+          "p_value": null,
+          "verdict": "indeterminate"
+        },
+        "passed": false,
+        "pass_rule": "both BCa CI lowers > 0.80",
+        "receiver_a": "gpt-oss:20b",
+        "receiver_b": "nemotron-3-nano:30b"
+      }
+    },
+    "krippendorff_alpha": {
+      "measure": "krippendorff_alpha",
+      "estimate": 0.8948604880585901,
+      "ci_low": 0.7478554037496394,
+      "ci_high": 0.9529278357570077,
+      "ci_level": 0.95,
+      "margin": 0.8,
+      "p_value": null,
+      "verdict": "indeterminate",
+      "reliability_level": "interval",
+      "n_items": 24,
+      "n_raters": 3,
+      "optional": true,
+      "point_alpha": 0.8948604880585901
+    },
+    "pass_rule": "each non-inert receiver pair: SpearmanRho AND ConcordanceCC CI lower > 0.80"
+  },
+  "e5b_encoder": {
+    "passed": false,
+    "positive": {
+      "n": 24,
+      "mean_cv": 3.9301649934895857,
+      "ci_low": 2.5081308816285897,
+      "ci_high": 6.4236701949278645,
+      "threshold": 0.15,
+      "passed": false
+    },
+    "scrambled_negative_control": {
+      "n": 24,
+      "mean_cv": 0.8925508392602929,
+      "ci_low": 0.6819848363309907,
+      "ci_high": 1.210967540990653,
+      "threshold": 0.15,
+      "passed": false
+    },
+    "scrambled_must_not_pass": true,
+    "scrambled_control_ok": true,
+    "pass_rule": "BCa CI upper of mean CV(original+plain+technical) < 0.15; scrambled variants must not pass that bar"
+  },
+  "passed": false
+}
